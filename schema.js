@@ -475,7 +475,10 @@ function createTable(connection, tableName, props, rels) {
     "created_at DATETIME, " +
     "updated_at DATETIME, " +
     "deleted_at DATETIME, " +
-    "data JSONB NOT NULL, ";
+    "data JSONB NOT NULL, " +
+    "owner VARCHAR(50), " +
+    "permittedUsers JSONB, " +
+    "permittedGroups JSONB, ";
     
   for(var pIdx = 0; pIdx < props.length; pIdx++) {
     let p = props[pIdx];
@@ -519,7 +522,7 @@ function createTable(connection, tableName, props, rels) {
   for(var rIdx = 0; rIdx < toOneRels.length; rIdx++) {
     var r = toOneRels[rIdx];
 
-    qry += r.relates_to + ' INT REFERENCES ' + r.foreign_table + '(row_id)';
+    qry += r.relates_to + ' VARCHAR(50) REFERENCES ' + r.foreign_table + '(id)';
 
     if(rIdx !== rels.length - 1) {
       qry += ', ';
@@ -560,8 +563,8 @@ function createLinkingTable(connection, tableName, leftTable, rightTable) {
 	var deferred = Q.defer();
 	var qry = "CREATE TABLE " + tableName + " ( " +
 		"row_id SERIAL PRIMARY KEY, " +
-		"left_id INT NOT NULL REFERENCES " + leftTable + "(row_id), " +
-		"right_id INT NOT NULL REFERENCES " + rightTable + "(row_id), " +
+		"left_id INT NOT NULL REFERENCES " + leftTable + "(id), " +
+		"right_id INT NOT NULL REFERENCES " + rightTable + "(id), " +
 		"rel_type TEXT, " +
 		"rel_props JSONB" +
 		");";
