@@ -10,40 +10,40 @@ module.exports = {
 		var deferred = Q.defer();
 		dataAccess = utilities.getDataAccess();
 		checkDbExists(name, user, pass, host, port)
-			.then(function () {
-				return dataAccess.getDbConnection();
-			})
-			.then(function (connection) {
-				return [connection, createInitialTables(connection, name, user, pass, host, port)];
-			})
-			.spread(function (connection, cit_res) {
-				return [connection, makeTables(connection, modelsJs.data.models, name, user, pass, host, port)];
-			})
-			.spread(function (connection, res) {
-				return [res, dataAccess.closeDbConnection(connection)];
-			})
-			.spread(function (commit_res) {
-				return [createDefaultUser(name, user, pass, host, port, utilities)];
-			})
-			.then(function (res) {
-				deferred.resolve(res);
-			})
-			.fail(function (err) {
-				if (err !== undefined && err !== null && typeof (err.AddToError) === 'function') {
-					deferred.reject(err.AddToError(__filename, 'updateSchema'));
-				}
-				else {
-					var errorObj = new ErrorObj(500,
-						'sc1001',
-						__filename,
-						'updateSchema',
-						'error updating schema',
-						'Database error',
-						err
-					);
-					deferred.reject(errorObj);
-				}
-			});
+    .then(function () {
+      return dataAccess.getDbConnection();
+    })
+    .then(function (connection) {
+      return [connection, createInitialTables(connection, name, user, pass, host, port)];
+    })
+    .spread(function (connection, cit_res) {
+      return [connection, makeTables(connection, modelsJs.data.models, name, user, pass, host, port)];
+    })
+    .spread(function (connection, res) {
+      return [res, dataAccess.closeDbConnection(connection)];
+    })
+    .spread(function (commit_res) {
+      return [createDefaultUser(name, user, pass, host, port, utilities)];
+    })
+    .then(function (res) {
+      deferred.resolve(res);
+    })
+    .fail(function (err) {
+      if (err !== undefined && err !== null && typeof (err.AddToError) === 'function') {
+        deferred.reject(err.AddToError(__filename, 'updateSchema'));
+      }
+      else {
+        var errorObj = new ErrorObj(500,
+          'sc1001',
+          __filename,
+          'updateSchema',
+          'error updating schema',
+          'Database error',
+          err
+        );
+        deferred.reject(errorObj);
+      }
+    });
 
 		return deferred.promise;
 	}
@@ -59,49 +59,49 @@ function createInitialTables(connection, name, user, pass, host, port) {
 		var inner_deferred = Q.defer();
 
 		checkForTable(connection, mt)
-			.then(function (tableExists) {
-				if (!tableExists) {
-					createTable(connection, mt)
-						.then(function (ct_res) {
-							inner_deferred.resolve();
-						})
-						.fail(function (ct_err) {
-							if (ct_err !== undefined && ct_err !== null && typeof (ct_err.AddToError) === 'function') {
-								inner_deferred.reject(ct_err.AddToError(__filename, 'createInitialTables'));
-							}
-							else {
-								var errorObj = new ErrorObj(500,
-									'sc1002',
-									__filename,
-									'createInitialTables',
-									'error creating tables',
-									'Database error',
-									ct_err
-								);
-								inner_deferred.reject(errorObj);
-							}
-						});
-				}
-				else {
-					inner_deferred.resolve();
-				}
-			})
-			.fail(function (err) {
-				if (err !== undefined && err !== null && typeof (err.AddToError) === 'function') {
-					inner_deferred.reject(err.AddToError(__filename, 'createInitialTables'));
-				}
-				else {
-					var errorObj = new ErrorObj(500,
-						'sc1003',
-						__filename,
-						'createInitialTables',
-						'error creating tables',
-						'Database error',
-						err
-					);
-					inner_deferred.reject(errorObj);
-				}
-			});
+    .then(function (tableExists) {
+      if (!tableExists) {
+        createTable(connection, mt)
+          .then(function (ct_res) {
+            inner_deferred.resolve();
+          })
+          .fail(function (ct_err) {
+            if (ct_err !== undefined && ct_err !== null && typeof (ct_err.AddToError) === 'function') {
+              inner_deferred.reject(ct_err.AddToError(__filename, 'createInitialTables'));
+            }
+            else {
+              var errorObj = new ErrorObj(500,
+                'sc1002',
+                __filename,
+                'createInitialTables',
+                'error creating tables',
+                'Database error',
+                ct_err
+              );
+              inner_deferred.reject(errorObj);
+            }
+          });
+      }
+      else {
+        inner_deferred.resolve();
+      }
+    })
+    .fail(function (err) {
+      if (err !== undefined && err !== null && typeof (err.AddToError) === 'function') {
+        inner_deferred.reject(err.AddToError(__filename, 'createInitialTables'));
+      }
+      else {
+        var errorObj = new ErrorObj(500,
+          'sc1003',
+          __filename,
+          'createInitialTables',
+          'error creating tables',
+          'Database error',
+          err
+        );
+        inner_deferred.reject(errorObj);
+      }
+    });
 
 		return inner_deferred.promise;
 	}))
@@ -466,15 +466,76 @@ function checkForTable(connection, tableName) {
 	return deferred.promise;
 }
 
-function createTable(connection, tableName) {
+function createTable(connection, tableName, props, rels) {
 	var deferred = Q.defer();
 	var qry = "CREATE TABLE " + tableName + " ( " +
-		"row_id SERIAL PRIMARY KEY, " +
-		"data JSONB NOT NULL);";
+    "row_id SERIAL PRIMARY KEY, " +
+    "id VARCHAR(50) NOT NULL UNIQUE, " +
+    "object_type VARCHAR(50), " +
+    "created_at DATETIME, " +
+    "updated_at DATETIME, " +
+    "deleted_at DATETIME, " +
+    "data JSONB NOT NULL, ";
+    
+  for(var pIdx = 0; pIdx < props.length; pIdx++) {
+    let p = props[pIdx];
+    if(!p.isJson) {
+      qry += p.name + ' ';
+      if(p.hasOwnProperty('db_type') && p['db_type'] != null) {
+        qry += p['db_type'];
+      }
+      else {
+        if(p.type === 'object' || p.type === 'array') {
+          qry += 'JSONB';
+        }
+        else if(p.type === 'number') {
+          qry += 'DOUBLE';
+        }
+        else if(p.type === 'file') {
+          qry += 'TEXT';
+        }
+        else if(p.type === 'boolean') {
+          qry += 'BOOLEAN';
+        }
+        else if(p.type === 'date') {
+          qry += 'VARCHAR(24)';
+        }
+        else if(p.type === 'string') {
+          qry += 'TEXT';
+        }
+      }
+
+      // IF THIS IS THE NOT THE LAST PROPERTY
+      // OR IF THIS IS THE LAST PROPERTY AND THERE ARE TO-ONE RELATIONSHIPS
+      // FOR THIS MODEL
+      if(pIdx < props.length || (pIdx === props.length - 1 && rels.filter((r) => r.toOne === true).length > 0)) {
+        qry += ', ';
+      }
+    }
+  }
+
+  var toOneRels = rels.filter((r) => r.toOne === true);
+
+  for(var rIdx = 0; rIdx < toOneRels.length; rIdx++) {
+    var r = toOneRels[rIdx];
+
+    qry += r.relates_to + ' INT REFERENCES ' + r.foreign_table + '(row_id)';
+
+    if(rIdx !== rels.length - 1) {
+      qry += ', ';
+    }
+  }
+
+  qry += ');'
+
 	var qry_params = [];
 	dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
 	.then(function (connecton) {
 		var indexQry  = 'CREATE INDEX ON '+ tableName + " USING gin (data);";
+		return dataAccess.ExecutePostgresQuery(indexQry, [], connection);
+  })
+  .then(function (connecton) {
+		var indexQry  = 'CREATE INDEX ON '+ tableName + " (id);";
 		return dataAccess.ExecutePostgresQuery(indexQry, [], connection);
 	})
 	.then(function(connection) {
