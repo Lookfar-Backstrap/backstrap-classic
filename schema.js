@@ -472,6 +472,7 @@ function createTable(connection, tableName, props, rels) {
     "row_id SERIAL PRIMARY KEY, " +
     "id VARCHAR(50) NOT NULL UNIQUE, " +
     "object_type VARCHAR(50), " +
+    "is_active BOOLEAN, " +
     "created_at DATETIME, " +
     "updated_at DATETIME, " +
     "deleted_at DATETIME, " +
