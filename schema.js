@@ -264,12 +264,12 @@ function makeTables(connection, models, name, user, pass, host, port) {
 	var linkingTableList = [];
 	var linkingDetails = [];
 
-	// GET NAMES OF ALL TABLES USING obj_type and relationships.linking_table
+	// GET NAMES OF ALL TABLES USING object_type and relationships.linking_table
 	// MAKE SURE WE DON'T ADD THEM TWICE
 	for (var model in allModels) {
 		var m = allModels[model];
-		if (tableList.indexOf(m.obj_type) == -1) {
-			tableList.push(m.obj_type);
+		if (tableList.indexOf(m.object_type) == -1) {
+			tableList.push(m.object_type);
 		}
 
 		for (var rel in m.relationships) {
@@ -286,18 +286,18 @@ function makeTables(connection, models, name, user, pass, host, port) {
 					'linking_table': r.linking_table
 				};
 				if (r.relates_to === 'bsuser') {
-					lDetails.left_table = m.obj_type;
+					lDetails.left_table = m.object_type;
 					lDetails.right_table = 'bsuser';
 				}
 				else {
 					// LINKING TABLE MUST BE NAMED USING THE TWO TABLE NAMES THAT IT JOINS
-					var computedLinkingTableName = r.relates_to + '_' + m.obj_type;
+					var computedLinkingTableName = r.relates_to + '_' + m.object_type;
 					if (r.linking_table === computedLinkingTableName) {
 						lDetails.left_table = r.relates_to;
-						lDetails.right_table = m.obj_type;
+						lDetails.right_table = m.object_type;
 					}
 					else {
-						lDetails.left_table = m.obj_type;
+						lDetails.left_table = m.object_type;
 						lDetails.right_table = r.relates_to;
 					}
 				}
@@ -601,7 +601,7 @@ function checkDbExists(db_name, db_user, db_pass, db_host, db_port) {
 			//BECAUSE events.js THROWS AN UNHANDLED EXCEPTION WHEN 
 			//QUERYING A DB THAT DOESNT EXIST, WE CANNOT DO SELECT 1 FROM pg_database WHERE datname = '" + db_name + "'
 			//SO WE JUST CREATE AND IGNORE IF ERRORS BECAUSE IT EXISTS
-			//42P04 == Datbase already exists
+			//42P04 == Database already exists
 			if (err && err.code !== '42P04') {
 				var errorObj = new ErrorObj(500,
 					'sc0013',

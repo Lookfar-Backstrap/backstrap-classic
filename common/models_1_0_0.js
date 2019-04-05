@@ -118,7 +118,7 @@ Models.prototype.get = {
       }
 		
       var queryObject = {
-            "obj_type": modelType,
+            "object_type": modelType,
             "resolve": [],
             "parameters": params,
             "relates_to": relates,

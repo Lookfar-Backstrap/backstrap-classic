@@ -24,8 +24,8 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
         //enabled states if the dom elements are enabled. This is only on create
         if (!$scope.enabled) {
             $scope.rel = {
-                relates_from: $scope.model.obj_type,
-                plural_rev: pluralize.plural($scope.model.obj_type),
+                relates_from: $scope.model.object_type,
+                plural_rev: pluralize.plural($scope.model.object_type),
                 relates_to: title[1].relates_to,
                 rel_type: title[1].rel_type,
                 plural_name: title[1].plural_name,
@@ -36,7 +36,7 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
         else {
             $scope.rel = {
                 relates_to: '',
-                obj_type: ''
+                object_type: ''
             };
         }
 
@@ -47,14 +47,14 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
             }
             else {
                 $scope.models.forEach(function (m) {
-                    if (m.obj_type !== undefined) {
+                    if (m.object_type !== undefined) {
                         if ($scope.results.indexOf(m) == -1) {
                             $scope.results.push(m);
                         }
                     }
                 });
                 var userModel = {
-                    'obj_type': 'bsuser',
+                    'object_type': 'bsuser',
                     'description': 'a user object',
                     'relationships': [],
                     'properties': []
@@ -71,15 +71,15 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
         };
 
         $scope.selectedItemChange = function (item) {
-            $scope.rel.relates_to = item.obj_type;
-            $scope.rel.plural_name = pluralize.plural(item.obj_type);
-            $scope.rel.relates_from = $scope.model.obj_type;
-            $scope.rel.plural_rev = pluralize.plural($scope.model.obj_type);
-            if (item.obj_type === 'bsuser') {
-                $scope.rel.linking_table = $scope.model.obj_type + '_bsuser';
+            $scope.rel.relates_to = item.object_type;
+            $scope.rel.plural_name = pluralize.plural(item.object_type);
+            $scope.rel.relates_from = $scope.model.object_type;
+            $scope.rel.plural_rev = pluralize.plural($scope.model.object_type);
+            if (item.object_type === 'bsuser') {
+                $scope.rel.linking_table = $scope.model.object_type + '_bsuser';
             }
             else {
-                $scope.rel.linking_table = $scope.model.obj_type + '_' + item.obj_type;
+                $scope.rel.linking_table = $scope.model.object_type + '_' + item.object_type;
             }
             $scope.results = [];
         };
@@ -93,7 +93,7 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
                 availModels.push(m);
             });
             var userModel = {
-                'obj_type': 'bsuser',
+                'object_type': 'bsuser',
                 'description': 'a user object',
                 'relationships': [],
                 'properties': []
@@ -122,7 +122,7 @@ dashboard.controller("RelationshipController", ['$scope', '$rootScope', '$animat
                 }
                 else {
                     allModels.forEach(function (m) {
-                        if (m.obj_type.toLowerCase() === $scope.rel.relates_to.toLowerCase()) {
+                        if (m.object_type.toLowerCase() === $scope.rel.relates_to.toLowerCase()) {
                             isValidRelTo = true;
                         }
                     });

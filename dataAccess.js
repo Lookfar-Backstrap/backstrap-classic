@@ -97,12 +97,12 @@ var DataAccess = function (dbConfig, mdls, util) {
 	// AND THE relationshipMap
 	for (var mIdx = 0; mIdx < models.length; mIdx++) {
 		var model = models[mIdx];
-		this.AddTypeToCollectionMap(model.obj_type, model.obj_type);
+		this.AddTypeToCollectionMap(model.object_type, model.object_type);
 
 		for (var rIdx = 0; rIdx < model.relationships.length; rIdx++) {
 			var r = model.relationships[rIdx];
 			var relMapObj = {
-				'type1': model.obj_type,
+				'type1': model.object_type,
 				'type2': r.relates_to,
 				'linkingTable': r.linking_table
 			};
@@ -979,7 +979,7 @@ DataAccess.prototype.UpdateAllEntities = function (updateAllObject, connection, 
 	var qryWhere = " WHERE data->>'id' IN ('abcdefg'"; // this is so my where clause can all start with , 
 
 	//distinct because in the case of location, mikes house may be both pick up and drop off.
-	qryUpdate = "UPDATE " + updateAllObject.obj_type + " SET data = JSONB_SET(data,'{" + updateAllObject.property + "}', '\"" + updateAllObject.value + "\"', false)";
+	qryUpdate = "UPDATE " + updateAllObject.object_type + " SET data = JSONB_SET(data,'{" + updateAllObject.property + "}', '\"" + updateAllObject.value + "\"', false)";
 
 	var ix = 0;
 	updateAllObject.ids.forEach(function (id) {
@@ -2725,7 +2725,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 			loop1:
 			for (var mIdx = 0; mIdx < models.length; mIdx++) {
 				// CHECK THE MODEL FOR objectType
-				if (models[mIdx].obj_type === objectType) {
+				if (models[mIdx].object_type === objectType) {
 					for (var rIdx = 0; rIdx < models[mIdx].relationships.length; rIdx++) {
 						if (models[mIdx].relationships[rIdx].relates_to === relatedType) {
 							propName = models[mIdx].relationships[rIdx].plural_name;
@@ -2736,7 +2736,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 
 				// RELATIONSHIPS ONLY HAVE DESCRIPTORS IN A SINGLE DIRECTION
 				// SO CHECK THE RELATED TYPE TOO
-				if (models[mIdx].obj_type === relatedType) {
+				if (models[mIdx].object_type === relatedType) {
 					for (var rIdx = 0; rIdx < models[mIdx].relationships.length; rIdx++) {
 						if (models[mIdx].relationships[rIdx].relates_to === objectType) {
 							propName = models[mIdx].relationship[rIdx].plural_rev;
@@ -3173,11 +3173,11 @@ DataAccess.prototype.ExecuteParameterizedQuery = function (parameterizedQuery, p
 //EXAMPLE OF QUERY OBJECT:
 // var query_object = {
 //     "resolve_relationships": true,
-//     "obj_type": "person",
+//     "object_type": "person",
 //     "parameters": [],
 //     "relates_to": [
 //          {
-//              "obj_type": service_record,
+//              "object_type": service_record,
 //              "rel_type": "",
 //              "parameters": [["and","service_description","oil","partial"]
 //          }
@@ -3222,21 +3222,21 @@ DataAccess.prototype.t_BackstrapQuery = function (connection, queryObject, model
 
 	try {
 		var isUserObj = false;
-		if (queryObject.obj_type === 'bsuser') {
+		if (queryObject.object_type === 'bsuser') {
 			isUserObj = true;
 		}
 
-		qrySelect = "SELECT " + queryObject.obj_type + ".data FROM " + queryObject.obj_type;
+		qrySelect = "SELECT " + queryObject.object_type + ".data FROM " + queryObject.object_type;
 		var qryJoins = "";
 		var whereAppend = "";
 		if (!isUserObj) {
 			models.data.models.forEach(function (m) {
-				if (m.obj_type === queryObject.obj_type) {
+				if (m.object_type === queryObject.object_type) {
 					queryObject.relates_to.forEach(function (relTo) {
-						var parentJoinKey = m.obj_type + '.row_id';
+						var parentJoinKey = m.object_type + '.row_id';
 						var ixLink = 0;
 						m.relationships.forEach(function (r) {
-							if (relTo.obj_type === r.relates_to) {
+							if (relTo.object_type === r.relates_to) {
 								//JOIN LINKING TABLE
 								ixLink++;
 								var ltAlias = "lt" + ixLink;
@@ -3250,7 +3250,7 @@ DataAccess.prototype.t_BackstrapQuery = function (connection, queryObject, model
 								//THEN LINKED ENTITY TABLE
 								var rtAlias = "rt" + ixLink;
 								var rtJoinField = rtAlias + ".row_id";
-								if (relTo.obj_type === 'bsuser') {
+								if (relTo.object_type === 'bsuser') {
 									qryJoins += " INNER JOIN bsuser " + rtAlias + " ON " + ltJoinRight + "=" + rtJoinField;
 								}
 								else {
@@ -3265,17 +3265,17 @@ DataAccess.prototype.t_BackstrapQuery = function (connection, queryObject, model
 						});
 					});
 					//only active records
-					qrySelect += qryJoins += " WHERE " + m.obj_type + ".data->'is_active' = 'true'";
+					qrySelect += qryJoins += " WHERE " + m.object_type + ".data->'is_active' = 'true'";
 
 					// IF THE USER DOESN'T SPECIFY, WE ONLY WANT ACTIVE RECORDS FOR MAIN OBJECT
 					if (isActive === undefined || isActive === null || isActive === true) {
-						qrySelect += " AND " + queryObject.obj_type + ".data->'is_active' = 'true'";
+						qrySelect += " AND " + queryObject.object_type + ".data->'is_active' = 'true'";
 					}
 
 					//add where clause for any parent obj properties in query
 					queryObject.parameters.forEach(function (p) {
 						//use the ILIKE for case insensitive, but require whole word match
-						qrySelect += " AND (" + m.obj_type + ".data #>> '{" + p.property + "}' ILIKE '" + p.value + "')";
+						qrySelect += " AND (" + m.object_type + ".data #>> '{" + p.property + "}' ILIKE '" + p.value + "')";
 					});
 					qrySelect += whereAppend;
 				}

@@ -265,8 +265,8 @@ Endpoints.prototype.generateFromModels = function(models, doNetworkReload, callb
 		});
 		var endpointDescriptor = {
 			'verb': 'GET',
-			'call': currentModel.obj_type.toLowerCase(),
-			'desc': 'Returns '+currentModel.obj_type+' objects',
+			'call': currentModel.object_type.toLowerCase(),
+			'desc': 'Returns '+currentModel.object_type+' objects',
 			'authRequired': true,
 			'args': eArgs,
 			'isUserCreated': false
@@ -296,8 +296,8 @@ Endpoints.prototype.generateFromModels = function(models, doNetworkReload, callb
 		});
 		endpointDescriptor = {
 			'verb': 'POST',
-			'call': currentModel.obj_type.toLowerCase(),
-			'desc': 'Adds a '+currentModel.obj_type+' object',
+			'call': currentModel.object_type.toLowerCase(),
+			'desc': 'Adds a '+currentModel.object_type+' object',
 			'authRequired': true,
 			'args': eArgs,
 			'isUserCreated':false
@@ -336,8 +336,8 @@ Endpoints.prototype.generateFromModels = function(models, doNetworkReload, callb
 		});
 		endpointDescriptor = {
 			'verb': 'PATCH',
-			'call': currentModel.obj_type.toLowerCase(),
-			'desc': 'Updates a '+currentModel.obj_type+' object',
+			'call': currentModel.object_type.toLowerCase(),
+			'desc': 'Updates a '+currentModel.object_type+' object',
 			'authRequired': true,
 			'args': eArgs,
 			'isUserCreated': false
@@ -354,7 +354,7 @@ Endpoints.prototype.generateFromModels = function(models, doNetworkReload, callb
 		});
 		eArgs.push({
 			"name": "relates_to",
-			"type": "obj_type",
+			"type": "object_type",
 			"isRequired": false
 		});
 		if(currentModel.properties !== undefined && currentModel.properties !== null) {
@@ -372,7 +372,7 @@ Endpoints.prototype.generateFromModels = function(models, doNetworkReload, callb
 		}
 		endpointDescriptor = {
 			'verb': 'DELETE',
-			'call': currentModel.obj_type.toLowerCase(),
+			'call': currentModel.object_type.toLowerCase(),
 			'desc': 'Deletes a model object',
 			'authRequired': true,
 			'args': eArgs,

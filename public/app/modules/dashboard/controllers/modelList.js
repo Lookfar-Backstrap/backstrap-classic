@@ -15,7 +15,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
     $scope.searchList = function(){    
       vm.filteredResults = [];
       vm.modelList.forEach(function(m){
-            if (m.obj_type.toLowerCase().indexOf($scope.searchString.toLowerCase()) > -1){
+            if (m.object_type.toLowerCase().indexOf($scope.searchString.toLowerCase()) > -1){
                 vm.filteredResults.push(m);
             }
         });

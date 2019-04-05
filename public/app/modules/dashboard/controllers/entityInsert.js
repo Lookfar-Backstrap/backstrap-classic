@@ -53,7 +53,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
                 modelsWithUser[idx] = vm.allModels[idx];
             }
             modelsWithUser.push({
-                'obj_type': 'bsuser',
+                'object_type': 'bsuser',
                 'description': 'This is a person entity',
                 'relationships': [],
                 'properties': [{
@@ -95,7 +95,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
             });
 
             modelsWithUser.forEach(function(r){
-                if (r.obj_type === $scope.data.relGroup){                   
+                if (r.object_type === $scope.data.relGroup){                   
                     var query = searchRelationQuery();
                     backstrap_service.postBackstrapQuery(query)
                     .then(function(queryItems){             
@@ -162,7 +162,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
             query += "{" +
             "\"query_object\": {" + 
                 "\"resolve\": []," +
-                "\"obj_type\": \"" + $scope.data.relGroup +  "\"," + 
+                "\"object_type\": \"" + $scope.data.relGroup +  "\"," + 
                 "\"parameters\": [],"+
                 "\"relates_to\": []," + 
                 "\"offset\": " + vm.min + "," + 
@@ -186,7 +186,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
                 $scope.QueryResultItemsCount++;     
                 itemNameNumber++;
                 var qr ={
-                        title: vm.model.obj_type + ' ' + itemNameNumber,
+                        title: vm.model.object_type + ' ' + itemNameNumber,
                         query: query,
                         items: [],
                         table: {},
@@ -320,7 +320,7 @@ $scope.addRelationshipModal = function(rel){
                     }                             
                 });
                 if (doSave){
-                    newEntityObj['object_type'] = vm.model.obj_type;            
+                    newEntityObj['object_type'] = vm.model.object_type;            
                     $scope.selectedRelationshipProperties.forEach(function(r){
                         objRelationships.push({
                             object_type: r.rel.object_type,
@@ -355,7 +355,7 @@ $scope.addRelationshipModal = function(rel){
 
          $scope.showHint = function(propName){
             var propObj = {
-                 obj_type: vm.model.obj_type,
+                 object_type: vm.model.object_type,
                  property: propName,
                  hint: ''
                 }

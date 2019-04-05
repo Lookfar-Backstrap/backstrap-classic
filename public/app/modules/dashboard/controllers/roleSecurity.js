@@ -55,7 +55,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
             modal.element.modal();
             modal.close.then(function(result) {                 
                if (result.doSave){                
-                    saveModelFile(result.model, 'Successfully added model: ' + result.model.obj_type + ' from role.');  
+                    saveModelFile(result.model, 'Successfully added model: ' + result.model.object_type + ' from role.');  
                 }
             });
         });
@@ -72,7 +72,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
             modal.element.modal();
             modal.close.then(function(result) { 
                 if (result.doSave){                
-                    saveModelFile(result.model, 'Successfully removed model: ' + result.model.obj_type + ' from role.');                    
+                    saveModelFile(result.model, 'Successfully removed model: ' + result.model.object_type + ' from role.');                    
                 }
             });
         });
@@ -84,7 +84,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
         $scope.modelList.forEach(function(m){
             if (m.roles !== undefined && m.roles !== null && m.roles.length > 0){
                 if (m.roles.indexOf($scope.role.name) !== -1){
-                    $scope.modelGrid.push(m.obj_type);
+                    $scope.modelGrid.push(m.object_type);
                 }
             }
         });
@@ -135,7 +135,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
         $rootScope.actionInProgress = true;
         var objModels = backstrap_service.getLocalModels();                  
         objModels.forEach(function(model, ixx){
-            if (model.obj_type === modelToUpdate.obj_type){
+            if (model.object_type === modelToUpdate.object_type){
                 modelIxToUpdate = ixx;
             }
         });            

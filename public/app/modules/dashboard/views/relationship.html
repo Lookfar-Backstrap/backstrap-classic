@@ -11,7 +11,7 @@
         <p ng-show="!enabled && rel.is_active" style="padding:10px">Hey buddy, you are about to Deactivate a relationship. This is a very serious matter! If you aren't sure if you should do this
             or not, then you probably shouldn't. After you deactivate a relationship, any related data will no longer be returned. You can reactivate this relationship at any time. Proceed with caution...
         </p>
-         <p ng-show="enabled" style="padding:10px">You are about to create a new relationship for the parent object: {{model.obj_type}}
+         <p ng-show="enabled" style="padding:10px">You are about to create a new relationship for the parent object: {{model.object_type}}
         </p>
          <p ng-show="!rel.is_active && !enabled" style="padding:10px">If you active this relationship, any data that was there prior deactivation, will again be returned. 
         </p>
@@ -23,7 +23,7 @@
                 <div style="width:100%" class="suggest">
                     <ul class="suggest">
                         <li ng-repeat="r in results" data-ng-click="selectedItemChange(r)">
-                            <a>{{r.obj_type}}</a>
+                            <a>{{r.object_type}}</a>
                         </li>
                     </ul>
                 </div>

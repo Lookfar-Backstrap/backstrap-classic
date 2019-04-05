@@ -736,7 +736,7 @@ Taking it a step further, you may want to name these relationships.  For example
 {
    "models": [
        {
-           "obj_type": "car",
+           "object_type": "car",
            "description": "A car",
            "date_created": "2018-10-15T00:00:00.000Z",
            "date_updated": "2018-11-21T00:00:00.000Z",
@@ -788,7 +788,7 @@ Taking it a step further, you may want to name these relationships.  For example
            "updated_date": "2018-11-21"
        },
        {
-           "obj_type": "address",
+           "object_type": "address",
            "description": "an address",
            "date_created": "2018-10-15T00:00:00.000Z",
            "date_updated": "2018-11-06T00:00:00.000Z",

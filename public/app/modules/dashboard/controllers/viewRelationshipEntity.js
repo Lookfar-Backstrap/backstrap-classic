@@ -3,7 +3,7 @@ dashboard.controller('viewRelationshipEntityController', ['$scope', 'close', 'ti
     var relEntity = [];
     Object.keys(title.entity).forEach(function(key){
         var r = [key, title.entity[key]];	
-        if (key !== 'obj_type' && key !== 'object_type')
+        if (key !== 'object_type')
             relEntity.push(r);
         }); 
     $scope.data = relEntity;

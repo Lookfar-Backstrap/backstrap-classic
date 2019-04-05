@@ -1,7 +1,7 @@
 dashboard.controller('ModelPropertyHintController', ['$scope', 'close', 'title', function($scope, close, title) {
    
     $scope.property = title.property;
-    $scope.object_type = title.obj_type;
+    $scope.object_type = title.object_type;
     $scope.hint = title.hint;
     $scope.isName = false;
     if ($scope.property === "name"){

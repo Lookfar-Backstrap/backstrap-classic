@@ -96,24 +96,24 @@ function parseQueryParameters(objType, objParams, relType, ix) {
 	}
 }
 
-function ConvertRelsToJoins(sql, rootModelType, iModels, relates_to_obj_type, relates_to_rel_type, jCallback) {
+function ConvertRelsToJoins(sql, rootModelType, iModels, relates_to_object_type, relates_to_rel_type, jCallback) {
 	try {
 		var modelsCopy = iModels.slice(0);
 		async.eachSeries(modelsCopy, function (mc, mcCallback) {
-			if (mc.obj_type === relates_to_obj_type) {
+			if (mc.object_type === relates_to_object_type) {
 				//we don't want to join any further than here
 				var modelsCopy2 = models.slice(0);
 				//join this model as relates to
 				async.eachSeries(modelsCopy2, function (mc2, mc2Callback) {
 					async.eachSeries(mc2.relationships, function (rel, relCallback) {
-						if (rel.relates_to === relates_to_obj_type && rel.linking_table.indexOf(rootModelType) !== -1) {
+						if (rel.relates_to === relates_to_object_type && rel.linking_table.indexOf(rootModelType) !== -1) {
 							var sqlStr = " INNER JOIN " + rel.relates_to + " ON " + rel.relates_to + '.row_id' + "=" + rel.linking_table + ".right_id";
 							if (sql.indexOf(sqlStr) === -1 && sqlStr !== undefined) {
 								sql.push(sqlStr);
 							}
 
 							sqlStr = " INNER JOIN " + rel.linking_table + " ON " + (rel.relates_from === rootModelType ? rootModelType : rel.relates_from) + '.row_id' + "=" + rel.linking_table + ".left_id" +
-								((relates_to_rel_type !== null && relates_to_rel_type !== '' && sql.indexOf(relates_to_obj_type) == -1) ? " AND " + rel.linking_table + ".rel_type='" + relates_to_rel_type + "'" : "");
+								((relates_to_rel_type !== null && relates_to_rel_type !== '' && sql.indexOf(relates_to_object_type) == -1) ? " AND " + rel.linking_table + ".rel_type='" + relates_to_rel_type + "'" : "");
 							if (sql.indexOf(sqlStr) === -1) {
 								sql.push(sqlStr);
 							}
@@ -121,23 +121,23 @@ function ConvertRelsToJoins(sql, rootModelType, iModels, relates_to_obj_type, re
 								return relCallback({ "done": true, "sql": sql });
 							}
 							else {
-								return relCallback({ "pending": true, "obj_type": rel.relates_from, "sql": sql });
+								return relCallback({ "pending": true, "object_type": rel.relates_from, "sql": sql });
 							}
 						}
-						else if (rel.relates_from === relates_to_obj_type && rel.relates_from !== rootModelType) {
-							var sqlStr2 = " INNER JOIN " + mc.obj_type + " ON " + mc.obj_type + '.row_id' + "=" + rel.linking_table + ".left_id";
+						else if (rel.relates_from === relates_to_object_type && rel.relates_from !== rootModelType) {
+							var sqlStr2 = " INNER JOIN " + mc.object_type + " ON " + mc.object_type + '.row_id' + "=" + rel.linking_table + ".left_id";
 							if (sql.indexOf(sqlStr2) === -1) {
 								sql.push(sqlStr2);
 							}
 
 							sqlStr2 = " INNER JOIN " + rel.linking_table + " ON " + rel.relates_to + '.row_id' + "=" + rel.linking_table + ".right_id" +
-								((relates_to_rel_type !== null && relates_to_rel_type !== '' && sql.indexOf(relates_to_obj_type) == -1) ? " AND " + rel.linking_table + ".rel_type='" + relates_to_rel_type + "'" : "");
+								((relates_to_rel_type !== null && relates_to_rel_type !== '' && sql.indexOf(relates_to_object_type) == -1) ? " AND " + rel.linking_table + ".rel_type='" + relates_to_rel_type + "'" : "");
 							if (sql.indexOf(sqlStr2) === -1) {
 								sql.push(sqlStr2);
 							}
-							return relCallback({ "pending": true, "obj_type": rel.relates_from, "sql": sql });
+							return relCallback({ "pending": true, "object_type": rel.relates_from, "sql": sql });
 						}
-						if (relates_to_obj_type === rootModelType) {
+						if (relates_to_object_type === rootModelType) {
 							return relCallback({ "done": true, "sql": sql });
 						}
 						else {
@@ -157,13 +157,13 @@ function ConvertRelsToJoins(sql, rootModelType, iModels, relates_to_obj_type, re
 				return jCallback(res);
 			}
 			else {
-				return jCallback({ "done": false, "err": "Related model not found. Model: " + relates_to_obj_type });
+				return jCallback({ "done": false, "err": "Related model not found. Model: " + relates_to_object_type });
 			}
 		});
 	} catch (e) { return jCallback({ "done": true, "err": e, "sql": sql }) }
 };
 
-function GenerateSqlJoins(sql, rootModelType, models, relates_to_obj_type, relates_to_rel_type) {
+function GenerateSqlJoins(sql, rootModelType, models, relates_to_object_type, relates_to_rel_type) {
 
 	var deferred = Q.defer();
 	var modelsMaster = models.slice(0);
@@ -172,28 +172,28 @@ function GenerateSqlJoins(sql, rootModelType, models, relates_to_obj_type, relat
 	var ixReoccur = 0;
 	var prevRelatesToObjType = "";
 
-	var doJoin = function (sql, rootModelType, models, relates_to_obj_type, relates_to_rel_type) {
-		ConvertRelsToJoins(sql, rootModelType, models, relates_to_obj_type, relates_to_rel_type,
+	var doJoin = function (sql, rootModelType, models, relates_to_object_type, relates_to_rel_type) {
+		ConvertRelsToJoins(sql, rootModelType, models, relates_to_object_type, relates_to_rel_type,
 			function (res) {
 				if (res.done) {
 					deferred.resolve(res.sql);
 				}
 				else if (res.pending) {
 					//is the next model the root? If so, we are done
-					if (res.obj_type === rootModelType) {
+					if (res.object_type === rootModelType) {
 						deferred.resolve(sql);
 					}
 					else {
-						//The reoccurance of obj_type indicates that the query is stuck on a 
+						//The reoccurance of object_type indicates that the query is stuck on a 
 						//loop where the rel_from and rel_to can't resolve any longer, so abort if > 2
 						if (ixReoccur < 2) {
-							if (prevRelatesToObjType == res.obj_type) {
+							if (prevRelatesToObjType == res.object_type) {
 								ixReoccur++;
 							}
 							else {
-								prevRelatesToObjType = res.obj_type;
+								prevRelatesToObjType = res.object_type;
 							}
-							doJoin(sql, rootModelType, models, res.obj_type, relates_to_rel_type);
+							doJoin(sql, rootModelType, models, res.object_type, relates_to_rel_type);
 						}
 						else {
 							deferred.resolve(res.sql);
@@ -213,7 +213,7 @@ function GenerateSqlJoins(sql, rootModelType, models, relates_to_obj_type, relat
 			});
 	};
 
-	doJoin(sql, rootModelType, models, relates_to_obj_type, relates_to_rel_type);
+	doJoin(sql, rootModelType, models, relates_to_object_type, relates_to_rel_type);
 	return deferred.promise;
 }
 
@@ -225,7 +225,7 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 	var qryWhereAppend = " WHERE";
 	
 	//distinct because in the case of location, mikes house may be both pick up and drop off.
-	qrySelect = "SELECT " + queryObject.obj_type + ".data FROM " + queryObject.obj_type;
+	qrySelect = "SELECT " + queryObject.object_type + ".data FROM " + queryObject.object_type;
 
 	var modelsWithAccount = [];
 	var ixProps = 0;
@@ -236,11 +236,11 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 		modelsWithAccount.push(m);
 	});
 	//this is needed to get the matching on account as it currently isn't in the model list
-	modelsWithAccount.push({ "obj_type": "bsuser" });
+	modelsWithAccount.push({ "object_type": "bsuser" });
 	var sql = [];
 	try {
 		async.forEach(queryObject.relates_to, function (relTo, relToCallback) {
-			GenerateSqlJoins([], queryObject.obj_type, modelsWithAccount, relTo.obj_type, relTo.rel_type)
+			GenerateSqlJoins([], queryObject.object_type, modelsWithAccount, relTo.object_type, relTo.rel_type)
 				.then(function (joins) {
 					var exists = false;
 					joins.forEach(function (j) {
@@ -256,7 +256,7 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 					qryJoins = qryJoins.replace(/,/g, '')
 					relTo.parameters.forEach(function (param) {
 						ixRelProps++;
-						var parse_relatedParam_res = parseQueryParameters(relTo.obj_type, param, relTo.rel_type, ixRelProps);
+						var parse_relatedParam_res = parseQueryParameters(relTo.object_type, param, relTo.rel_type, ixRelProps);
 						ixRelProps = ixRelProps + parse_relatedParam_res.ixAdd;
 						qryWhereAppend += parse_relatedParam_res.whereClause;
 						parse_relatedParam_res.parameterVals.forEach(function (pv) {
@@ -274,7 +274,7 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 			queryObject.parameters.forEach(function (objParam) {
         ixProps++;
         
-				var parse_model_param = parseQueryParameters(queryObject.obj_type, objParam, null, ixProps);
+				var parse_model_param = parseQueryParameters(queryObject.object_type, objParam, null, ixProps);
 
         ixProps = ixProps + parse_model_param.ixAdd;
 				parse_model_param.parameterVals.forEach(function (pv) {
@@ -285,10 +285,10 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 
 			//finish the select statement
 			if (qryWhereAppend.trim().toLowerCase() === "where") {
-				qryWhereAppend += " " + queryObject.obj_type + ".data->'is_active' = 'true'";
+				qryWhereAppend += " " + queryObject.object_type + ".data->'is_active' = 'true'";
 			}
 			else {
-				qryWhereAppend += " AND " + queryObject.obj_type + ".data->'is_active' = 'true'";
+				qryWhereAppend += " AND " + queryObject.object_type + ".data->'is_active' = 'true'";
 			}
 
 			qrySelect += qryJoins;
@@ -308,7 +308,7 @@ BackstrapSql.prototype.BuildQuery = function (queryObject, models) {
 						//can't do an order by without the model and property
 					}
 					else if (obProp.indexOf(".") === -1) {
-						obProp = queryObject.obj_type + "." + obProp + " " + obDir;
+						obProp = queryObject.object_type + "." + obProp + " " + obDir;
 					}
 					var obPropSplit = obProp.split(".");
 					try {
@@ -352,7 +352,7 @@ BackstrapSql.prototype.BackstrapQueryObject = function (query, callback) {
 
 		var query_object = {
 			"resolve": query.resolve,
-			"obj_type": (query.select !== undefined && query.select !== null ? query.select : ""),
+			"object_type": (query.select !== undefined && query.select !== null ? query.select : ""),
 			"parameters": [],
 			"relates_to": [],
 			"offset": 0,
@@ -461,9 +461,9 @@ BackstrapSql.prototype.BackstrapQueryObject = function (query, callback) {
 							for (var propertyIdx = 0; propertyIdx < m.properties.length; propertyIdx++) {
 								var p = m.properties[propertyIdx];
 
-								if (m.obj_type === propModel && p.name.toLowerCase() === propProp.toLowerCase()) {
+								if (m.object_type === propModel && p.name.toLowerCase() === propProp.toLowerCase()) {
 									//GREAT WE FOUND THE MODEL AND PROPERTY BUT IS IT PARENT OR REL?
-									if (m.obj_type.toLowerCase() === query.select.toLowerCase()) {
+									if (m.object_type.toLowerCase() === query.select.toLowerCase()) {
 										whereResult = { "prop": prop, "type": "mp" }; //mp = MODEL PROP
 									}
 									else {
@@ -482,7 +482,7 @@ BackstrapSql.prototype.BackstrapQueryObject = function (query, callback) {
 						if (whereResult != null) {
 							if (whereResult.type === "rp") { //REL PROP
 								var objRel = {
-									"obj_type": propModel,
+									"object_type": propModel,
 									"rel_type": "",
 									"parameters": [[operator, propProp, val, strCondition]],
 								};
