@@ -53,7 +53,6 @@ module.exports = {
 function createInitialTables(connection, name, user, pass, host, port) {
   var deferred = Q.defer();
 
-  //var modelTables = ['bsuser', 'session', 'internal_system'];
   var tbls = require('./InitialTables');
   var modelTables = [tbls.credentials, tbls.session, tbls.bsuser];
   var linkingTables = [{ 
@@ -98,7 +97,18 @@ function createInitialTables(connection, name, user, pass, host, port) {
         });
       }
       else {
-        inner_deferred.resolve();
+        // CHECK THE COLUMNS AND DATA TYPES
+        describeTable(connection, mt.object_type)
+        .then(function(cols) {
+          // COMPARE AND RESOLVE ANY DIFFERENCES
+          return alterTable(connection, mt, cols);
+        })
+        .then(function(alt_res) {
+          inner_deferred.resolve();
+        })
+        .fail(function(alt_err) {
+          inner_deferred.resolve();
+        });
       }
     })
     .fail(function (err) {
@@ -180,7 +190,7 @@ function createInitialTables(connection, name, user, pass, host, port) {
     return Q.all(toOneRels.map(function (rel) {
       var inner_deferred = Q.defer();
 
-      getColumnAndType(connection, rel.relates_from, rel.relates_to)
+      getColumnType(connection, rel.relates_from, rel.relates_to)
       .then(function(dataType) {
         if(dataType === null) {
           // COLUMN DOESN'T EXIST
@@ -462,7 +472,7 @@ function makeTables(connection, models, name, user, pass, host, port) {
     return Q.all(toOneRels.map(function (rel) {
       var inner_deferred = Q.defer();
 
-      getColumnAndType(connection, rel.object_type, rel.relates_to)
+      getColumnType(connection, rel.object_type, rel.relates_to)
       .then(function(dataType) {
         if(dataType === null) {
           // COLUMN DOESN'T EXIST
@@ -572,7 +582,7 @@ function createTable(connection, tableDesc) {
         qry += 'JSONB';
       }
       else if(p.data_type === 'number') {
-        qry += 'DOUBLE';
+        qry += 'DOUBLE PRECISION';
       }
       else if(p.data_type === 'file') {
         qry += 'TEXT';
@@ -589,11 +599,11 @@ function createTable(connection, tableDesc) {
     }
 
     if(p.unique === true) {
-      qry += ' UNIQUE';
+      qry += ' SET UNIQUE';
     }
 
     if(p.require === true) {
-      qry += ' NOT NULL';
+      qry += ' SET NOT NULL';
     }
 
     if(pIdx < relationalProps.length-1) { 
@@ -691,7 +701,157 @@ function addToOneRelationship(connection, tableName, relationship) {
 	return deferred.promise;
 }
 
-function getColumnAndType(connection, tableName, columnName) {
+function alterTable(connection, model, curCols) {
+  var deferred = Q.defer();
+
+  var addProps = [];
+  var alterProps = [];
+  var addRels = [];
+
+  var relationalProps = model.properties.filter((p) => p.nosql !== true);
+  relationalProps.map((p) => {
+    var cols = curCols.filter((col) => col.column_name === p.name);
+    if(cols.length > 0) {
+      var c = cols[0];
+      var dataType = determinePropDbType(p);
+      if(dataType !== c.data_type) {
+        alterProps.push(p);
+      }
+    }
+    else {
+      addProps.push(p)
+    }
+  });
+
+  var toOneRels = model.relationships.filter((r) => r.toOne === true);
+  toOneRels.map((r) => {
+    var cols = curCols.filter((col) => c.column_name === r.relates_to);
+    if(cols.length === 0) {
+      addRels.push(r);
+    }
+  });
+
+
+  Q.all(addProps.map((ap) => {
+    var inner_deferred = Q.defer();
+
+    var dataType = determinePropDbType(ap);
+    var qry = "ALTER TABLE " + model.object_type + " ADD COLUMN " + ap.name +
+             " " + dataType;
+    if(ap.unique) qry += " UNIQUE";
+    if(ap.required) qry += " NOT NULL";
+    var qry_params = [];
+
+    dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
+    .then(function (connection) {
+      inner_deferred.resolve();
+    })
+    .fail(function (err) {
+      var errorObj = new ErrorObj(500,
+        'sc0020',
+        __filename,
+        'alterTable',
+        'error inserting column',
+        'Database error',
+        err
+      );
+      inner_deferred.reject(errorObj);
+    });
+  
+    return inner_deferred.promise;
+  }))
+  .then(function() {
+    return Q.all(alterProps.map((ap) => {
+      var inner_deferred = Q.defer();
+
+      var dataType = determinePropDbType(ap);
+      var qry = "ALTER TABLE "+model.object_type+" ALTER COLUMN "+ap.name+
+              " TYPE "+dataType+" USING "+ap.name+"::"+dataType;
+      if(ap.required) qry += ", ALTER COLUMN "+ap.name+" SET NOT NULL";
+      var qry_params = [];
+
+      dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
+      .then(function (connection) {
+        inner_deferred.resolve();
+      })
+      .fail(function (err) {
+        var errorObj = new ErrorObj(500,
+          'sc0021',
+          __filename,
+          'alterTable',
+          'error altering column',
+          'Database error',
+          err
+        );
+        inner_deferred.reject(errorObj);
+      });
+
+      return inner_deferred.promise;
+    }));
+  })
+  .then(function() {
+    return Q.all(addRels.map((ar) => {
+      var inner_deferred = Q.defer();
+
+      var qry = "ALTER TABLE " + model.object_type + " ADD COLUMN " + ar.relates_to +
+              " VARCHAR(50) REFERENCES " + ar.foreign_table + "(id)";
+      var qry_params = [];
+
+      dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
+      .then(function (connection) {
+        inner_deferred.resolve();
+      })
+      .fail(function (err) {
+        var errorObj = new ErrorObj(500,
+          'sc0022',
+          __filename,
+          'alterTable',
+          'error adding column for to-one relationship',
+          'Database error',
+          err
+        );
+        inner_deferred.reject(errorObj);
+      });
+
+      return inner_deferred.promise;
+    }));
+  })
+  .then(function() {
+    deferred.resolve({success: true});
+  })
+  .fail(function(err) {
+    deferred.reject(err.AddToError(__filename, 'alterTable'));
+  })
+
+	return deferred.promise;
+}
+
+function describeTable(connection, tableName) {
+  var deferred = Q.defer();
+  var qry = "SELECT column_name, data_type FROM information_schema.columns WHERE \
+            table_name = '"+tableName+"'";
+	var qry_params = [];
+
+	dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
+	.then(function (connection) {
+		deferred.resolve(connection.results);
+	})
+	.fail(function (err) {
+		var errorObj = new ErrorObj(500,
+			'sc0016',
+			__filename,
+			'getColumnType',
+			'error checking column existance and type',
+			'Database error',
+			err
+		);
+		deferred.reject(errorObj);
+	});
+
+	return deferred.promise;
+}
+
+function getColumnType(connection, tableName, columnName) {
   var deferred = Q.defer();
   var qry = "SELECT data_type FROM information_schema.columns WHERE \
             table_name = '"+tableName+"' AND column_name = '"+columnName+"'";
@@ -710,7 +870,7 @@ function getColumnAndType(connection, tableName, columnName) {
 		var errorObj = new ErrorObj(500,
 			'sc0016',
 			__filename,
-			'getColumnAndType',
+			'getColumnType',
 			'error checking column existance and type',
 			'Database error',
 			err
@@ -719,6 +879,35 @@ function getColumnAndType(connection, tableName, columnName) {
 	});
 
 	return deferred.promise;
+}
+
+function determinePropDbType(prop) {
+  if(prop.hasOwnProperty('db_type')) {
+    return prop.db_type;
+  }
+  else {
+    var dataType = null;
+    switch(prop.data_type) {
+      case 'string':
+      case 'file':
+        dataType = 'TEXT';
+        break;
+      case 'number':
+        dataType = 'DOUBLE PRECISION';
+        break;
+      case 'boolean':
+        dataType = 'BOOLEAN';
+        break;
+      case 'date':
+        dataType = 'VARCHAR(24)';
+        break;
+      case 'object':
+      case 'array':
+        dataType = 'JSONB';
+        break;
+    }
+    return dataType;
+  }
 }
 
 function checkDbExists(db_name, db_user, db_pass, db_host, db_port) {
