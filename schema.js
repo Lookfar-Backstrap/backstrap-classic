@@ -50,7 +50,7 @@ module.exports = {
 }
 
 // MAKE THE SYSTEM TABLES
-function createInitialTables(connection, name, user, pass, host, port) {
+function createInitialTables(connection) {
   var deferred = Q.defer();
 
   var tbls = require('./InitialTables');
@@ -107,7 +107,7 @@ function createInitialTables(connection, name, user, pass, host, port) {
           inner_deferred.resolve();
         })
         .fail(function(alt_err) {
-          inner_deferred.resolve();
+          inner_deferred.reject(alt_err);
         });
       }
     })
@@ -306,7 +306,7 @@ function createDefaultUser(name, user, pass, host, port, utilities) {
 	return deferred.promise;
 }
 
-function makeTables(connection, models, name, user, pass, host, port) {
+function makeTables(connection, models) {
 	var deferred = Q.defer();
 	var allModels = models;
 
@@ -319,8 +319,8 @@ function makeTables(connection, models, name, user, pass, host, port) {
 	// MAKE SURE WE DON'T ADD THEM TWICE
 	for (var model in allModels) {
 		var m = allModels[model];
-		if (tableList.indexOf(m.object_type) == -1) {
-			tableList.push(m.object_type);
+		if (tableList.map((t) => t.object_type).indexOf(m.object_type) == -1) {
+			tableList.push(m);
 		}
 
 		for (var rel in m.relationships) {
@@ -328,15 +328,21 @@ function makeTables(connection, models, name, user, pass, host, port) {
 
       // IF THIS IS A TO-ONE RELATIONSHIP
       if(r.to_one === true) {
-        r.object_type = m.object_type;
         toOneRels.push(r)
       }
       else if (linkingTableList.indexOf(r.linking_table) == -1) {
         linkingTableList.push(r.linking_table);
 
         // PUSH THE RELATES_TO TABLE TO THE TABLE LIST TO CHECK FOR EXISTENCE
-        if (tableList.indexOf(r.relates_to) == -1 && (r.relates_to.toLowerCase() !== 'user' && r.relates_to.toLowerCase() !== 'account')) {
-          tableList.push(r.relates_to);
+        // IF IT'S A SYSTEM TABLE, SKIP IT
+        if (tableList.map((t) => t.object_type).indexOf(r.relates_to) == -1 && 
+            (r.relates_to.toLowerCase() !== 'bsuser' && 
+              r.relates_to.toLowerCase() !== 'user' && 
+              r.relates_to.toLowerCase() !== 'account' && 
+              r.relates_to.toLowerCase() !== 'session' && 
+              r.relates_to.toLowerCase() !== 'credentials')) {
+          var relatedTables = allModels.filter((t) => t.object_type === r.relates_to);
+          if(relatedTables.length > 0) tableList.push(relatedTables[0]);
         }
 
         var lDetails = {
@@ -363,15 +369,28 @@ function makeTables(connection, models, name, user, pass, host, port) {
 		}
 	}
 
-	Q.all(tableList.map(function (tableName) {
-		var inner_deferred = Q.defer();
+	Q.all(tableList.map(function (tableDesc) {
+    var inner_deferred = Q.defer();
+    var tableName = tableDesc.object_type;
+
 		checkForTable(connection, tableName)
     .then(function (tableExists) {
       if (tableExists) {
-        inner_deferred.resolve();
+        // CHECK THE COLUMNS AND DATA TYPES
+        describeTable(connection, tableName)
+        .then(function(cols) {
+          // COMPARE AND RESOLVE ANY DIFFERENCES
+          return alterTable(connection, tableDesc, cols);
+        })
+        .then(function(alt_res) {
+          inner_deferred.resolve();
+        })
+        .fail(function(alt_err) {
+          inner_deferred.reject(alt_err);
+        });
       }
       else {
-        createTable(connection, tableName)
+        createTable(connection, tableDesc)
         .then(function (ct_res) {
           inner_deferred.resolve();
         })
@@ -476,7 +495,7 @@ function makeTables(connection, models, name, user, pass, host, port) {
       .then(function(dataType) {
         if(dataType === null) {
           // COLUMN DOESN'T EXIST
-          return addToOneRelationship(connection, rel.object_type, rel);
+          return addToOneRelationship(connection, rel.relates_to, rel);
         }
         else {
           // FOR NOW JUST MOVE ON.  LATER WE MIGHT CHECK THE DATA TYPE
