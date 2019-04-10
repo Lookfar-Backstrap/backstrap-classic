@@ -458,13 +458,18 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 			db_connection.results = res.rows;
 			//THE NEW pg 7 NPM PACKAGE RETURNS ROW QUERIES WITH THE KEY data FOR EACH ROW
 			//WE ONLY WANT THE JSON OBJECT VALUE NOT THE KEY
-			if (db_connection.results !== undefined && db_connection.results !== null && db_connection.results.length > 0) {
-				var result = db_connection.results[0];
-				var keys = Object.keys(result);
-				if ((keys.length === 1 && keys[0] === 'data' && includeRowId !== true)
-					|| (keys.length == 2 && keys[0] === 'row_id' && keys[1] === 'data' && includeRowId !== true)) {
-					db_connection.results = db_connection.results.map(r => r.data);
-				}
+			if (db_connection.results !== undefined && db_connection.results !== null) {
+        if(db_connection.results.length > 0) {
+          var result = db_connection.results[0];
+          var keys = Object.keys(result);
+          if ((keys.length === 1 && keys[0] === 'data' && includeRowId !== true)
+            || (keys.length == 2 && keys[0] === 'row_id' && keys[1] === 'data' && includeRowId !== true)) {
+            db_connection.results = db_connection.results.map(r => r.data);
+          }
+        }
+        else {
+          db_connection.results = [];
+        }
 			}
 
 			// IF THE ARG connection PASSED INTO THE FUNCTION IS null/undefined
