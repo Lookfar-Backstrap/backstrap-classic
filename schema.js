@@ -723,9 +723,9 @@ function alterTable(connection, model, curCols) {
     }
   });
 
-  var toOneRels = model.relationships.filter((r) => r.toOne === true);
+  var toOneRels = model.relationships.filter((r) => r.to_one === true);
   toOneRels.map((r) => {
-    var cols = curCols.filter((col) => c.column_name === r.relates_to);
+    var cols = curCols.filter((col) => col.column_name === r.relates_to);
     if(cols.length === 0) {
       addRels.push(r);
     }
