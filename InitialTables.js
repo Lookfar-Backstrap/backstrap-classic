@@ -6,13 +6,13 @@ module.exports = {
       {
         name: "password",
         data_type: "string",
-        db_type: "VARCHAR(50)",
+        db_type: "VARCHAR(200)",
         required: true
       },
       {
         name: "salt",
         data_type: "string",
-        db_type: "VARCHAR(50)",
+        db_type: "VARCHAR(200)",
         required: true
       },
       {
@@ -36,7 +36,7 @@ module.exports = {
       {
         name: "token",
         data_type: "string",
-        db_type: "VARCHAR(50)",
+        db_type: "VARCHAR(64)",
         required: true,
         unique: true
       },
@@ -49,7 +49,7 @@ module.exports = {
       {
         name: "user_id",
         data_type: "string",
-        db_type: "VARCHAR(50)",
+        db_type: "VARCHAR(64)",
         required: true
       },
       {
@@ -97,17 +97,23 @@ module.exports = {
         "name": "username",
         "data_type": "string",
         "db_type": "VARCHAR(50)",
-        "required": true
+        "required": true,
+        "unique": true
       },
       {
         "name": "email",
         "data_type": "string",
-        "db_type": "VARCHAR(50)",
-        "required": true
-
+        "db_type": "VARCHAR(100)",
+        "required": true,
+        "unique": true
       },
       {
         "name": "roles",
+        "data_type": "array",
+        "required": false
+      },
+      {
+        "name": "groups",
         "data_type": "array",
         "required": false
       },

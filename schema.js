@@ -14,16 +14,16 @@ module.exports = {
       return dataAccess.getDbConnection();
     })
     .then(function (connection) {
-      return [connection, createInitialTables(connection, name, user, pass, host, port)];
+      return [connection, createInitialTables(connection)];
     })
     .spread(function (connection, cit_res) {
-      return [connection, makeTables(connection, modelsJs.data.models, name, user, pass, host, port)];
+      return [connection, makeTables(connection, modelsJs.data.models)];
     })
     .spread(function (connection, res) {
       return [res, dataAccess.closeDbConnection(connection)];
     })
     .spread(function (commit_res) {
-      return [createDefaultUser(name, user, pass, host, port, utilities)];
+      return [createDefaultUser(utilities)];
     })
     .then(function (res) {
       deferred.resolve(res);
@@ -234,74 +234,72 @@ function createInitialTables(connection) {
 	return deferred.promise;
 }
 
-function createDefaultUser(name, user, pass, host, port, utilities) {
+function createDefaultUser(utilities) {
 	var deferred = Q.defer();
-	var qry = "SELECT * FROM bsuser WHERE data #>> '{username}' = 'bsroot'";
+	var qry = "SELECT * FROM bsuser WHERE username = 'bsroot'";
 	var qry_params = [];
 	dataAccess.ExecutePostgresQuery(qry, qry_params, null)
-		.then(function (connection) {
-			if (connection.results.length === 0) {
-				// FIX THIS PROMISE CHAIN AND ADD A FAIL BLOCK
-				utilities.getUID()
-					.then(function (uid_res) {
-						var cryptoCall = Q.denodeify(crypto.randomBytes);
-						cryptoCall(48)
-							.then(function (buf) {
-								var salt = buf.toString('hex');
-								var saltedPassword = 'abcd@1234' + salt;
-								var hashedPassword = crypto.createHash('sha256').update(saltedPassword).digest('hex');
-								var token = crypto.randomBytes(48).toString('hex');
-								var userObj = {
-									'object_type': 'bsuser',
-									'id': uid_res,
-									'created_at': new Date().toISOString(),
-									'username': 'bsroot',
-									'first': '',
-									'last': '',
-									'email': 'bsroot@backstrap.io',
-									'salt': salt,
-									'password': hashedPassword,
-									'is_active': true,
-									'forgot_password_tokens': [token]
-								};
-								var roles = ['super-user'];
-								userObj['roles'] = roles;
-								qry = "INSERT INTO \"bsuser\"(\"data\") VALUES($1)";
-								qry_params = [userObj];
-								dataAccess.ExecutePostgresQuery(qry, qry_params, null)
-									.then(function (connection) {
-										deferred.resolve(connection);
-									})
-									.fail(function (err) {
-										var errorObj = new ErrorObj(500,
-											'sc1007',
-											__filename,
-											'createDefaultUser',
-											'error creating default user',
-											'Database error',
-											err
-										);
-										deferred.reject(errorObj);
-									})
-							});
-
-					});
-			}
-			else {
-				deferred.resolve(true);
-			}
-		})
-		.fail(function (err) {
-			var errorObj = new ErrorObj(500,
-				'sc1008',
-				__filename,
-				'createDefaultUser',
-				'error creating default user',
-				'Database error',
-				err
-			);
-			deferred.reject(errorObj);
-		});
+  .then(function (connection) {
+    if (connection.results.length === 0) {
+      // FIX THIS PROMISE CHAIN AND ADD A FAIL BLOCK
+      utilities.getUID()
+      .then(function (uid_forUser) {
+        return [uid_forUser, utilities.getUID()];
+      })
+      .spread(function(uid_forUser, uid_forCreds) {
+        var cryptoCall = Q.denodeify(crypto.randomBytes);
+        return [uid_forUser, uid_forCreds, cryptoCall(48)];
+      })
+      .spread(function(uid_forUser, uid_forCreds, buf) {
+        var salt = buf.toString('hex');
+        var saltedPassword = 'abcd@1234' + salt;
+        var hashedPassword = crypto.createHash('sha256').update(saltedPassword).digest('hex');
+        var token = crypto.randomBytes(48).toString('hex');
+        
+        
+        var dataField = {forgot_password_tokens: [token]};
+        var credentialsQry = "INSERT INTO credentials(id, password, salt, data) \
+                              VALUES($1, $2, $3, $4)";
+        var credentialsParams = [uid_forCreds, hashedPassword, salt, dataField];
+        return [uid_forUser, dataAccess.ExecutePostgresQuery(credentialsQry, credentialsParams, null)];
+      })
+      .spread(function(uid_forUser, connection) {
+        qry = "INSERT INTO bsuser(id, created_at, username, first, last, \
+                email, roles, groups) VALUES($1, $2, $3, $4, $5, $6, $7, $8)";
+        qry_params = [uid_forUser, new Date(), 'bsroot', 'backstrap', 'admin', '', JSON.stringify(['super-user']), JSON.stringify(['*'])];
+        
+        return dataAccess.ExecutePostgresQuery(qry, qry_params);
+      })
+      .then(function(connection) {
+        deferred.resolve(connection);
+      })
+      .fail(function(err) {
+        var errorObj = new ErrorObj(500,
+          'sc1007',
+          __filename,
+          'createDefaultUser',
+          'error creating default user',
+          'Database error',
+          err
+        );
+        deferred.reject(errorObj);
+      });
+    }
+    else {
+      deferred.resolve(true);
+    }
+  })
+  .fail(function (err) {
+    var errorObj = new ErrorObj(500,
+      'sc1008',
+      __filename,
+      'createDefaultUser',
+      'error creating default user',
+      'Database error',
+      err
+    );
+    deferred.reject(errorObj);
+  });
 
 	return deferred.promise;
 }
@@ -573,7 +571,7 @@ function createTable(connection, tableDesc) {
 
 	var qry = "CREATE TABLE " + tableName + " ( " +
     "row_id SERIAL PRIMARY KEY, " +
-    "id VARCHAR(50) NOT NULL UNIQUE, " +
+    "id VARCHAR(64) NOT NULL UNIQUE, " +
     "object_type VARCHAR(50) DEFAULT '"+tableName+"', " +
     "is_active BOOLEAN DEFAULT true, " +
     "created_at TIMESTAMP, " +
@@ -584,10 +582,11 @@ function createTable(connection, tableDesc) {
   
   let tablesToSkip = ['bsuser', 'credentials', 'session'];
   if(!tablesToSkip.includes(tableName)) {
-    qry += "owner VARCHAR(50), " +
+    qry += "owner VARCHAR(64), " +
             "permittedUsers JSONB, " +
             "permittedGroups JSONB, ";
   }
+
   
   var relationalProps = props.filter((p) => p.nosql !== true);
   for(var pIdx = 0; pIdx < relationalProps.length; pIdx++) {
@@ -618,11 +617,11 @@ function createTable(connection, tableDesc) {
     }
 
     if(p.unique === true) {
-      qry += ' SET UNIQUE';
+      qry += ' UNIQUE';
     }
 
     if(p.require === true) {
-      qry += ' SET NOT NULL';
+      qry += ' NOT NULL';
     }
 
     if(pIdx < relationalProps.length-1) { 
@@ -664,8 +663,8 @@ function createLinkingTable(connection, tableName, leftTable, rightTable) {
 	var deferred = Q.defer();
 	var qry = "CREATE TABLE " + tableName + " ( " +
 		"row_id SERIAL PRIMARY KEY, " +
-		"left_id VARCHAR(50) NOT NULL REFERENCES " + leftTable + "(id), " +
-		"right_id VARCHAR(50) NOT NULL REFERENCES " + rightTable + "(id), " +
+		"left_id VARCHAR(64) NOT NULL REFERENCES " + leftTable + "(id), " +
+		"right_id VARCHAR(64) NOT NULL REFERENCES " + rightTable + "(id), " +
 		"rel_type TEXT, " +
 		"rel_props JSONB" +
 		");";
@@ -698,7 +697,7 @@ function createLinkingTable(connection, tableName, leftTable, rightTable) {
 function addToOneRelationship(connection, tableName, relationship) {
   var deferred = Q.defer();
   var qry = "ALTER TABLE " + tableName + " ADD COLUMN " + relationship.relates_to +
-             " VARCHAR(50) REFERENCES " + relationship.foreign_table + "(id)";
+             " VARCHAR(64) REFERENCES " + relationship.foreign_table + "(id)";
 	var qry_params = [];
 
 	dataAccess.ExecutePostgresQuery(qry, qry_params, connection)
