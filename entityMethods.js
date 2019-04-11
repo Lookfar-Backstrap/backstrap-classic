@@ -500,7 +500,7 @@ EntityMethods.prototype.create = function (obj, obj_relationships) {
 	var dh = this;
 	models.data.models.forEach(function (m) {
 		if (m.object_type === obj.object_type) {
-			dataAccess.AddTypeToCollectionMap(obj.object_type, obj.object_type);
+			dataAccess.AddTypeToTableMap(obj.object_type, obj.object_type);
 			m.relationships.forEach(function (r) {
 				var relTo = r.relates_to;
 				var relMapObj = {
@@ -587,7 +587,7 @@ EntityMethods.prototype.update = function (obj, obj_add_rel, obj_remove_rel) {
 	if (obj_remove_rel === null) obj_remove_rel = [];
 	models.data.models.forEach(function (m) {
 		if (m.object_type === obj.object_type) {
-			dataAccess.AddTypeToCollectionMap(obj.object_type, obj.object_type);
+			dataAccess.AddTypeToTableMap(obj.object_type, obj.object_type);
 			m.relationships.forEach(function (r) {
 				var relMapObj = {
 					'type1': obj.object_type,

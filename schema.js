@@ -14,10 +14,10 @@ module.exports = {
       return dataAccess.getDbConnection();
     })
     .then(function (connection) {
-      return [connection, createInitialTables(connection)];
+      return [connection, createInitialTables(connection, modelsJs.data.models.filter(m => m.system_created === true))];
     })
     .spread(function (connection, cit_res) {
-      return [connection, makeTables(connection, modelsJs.data.models)];
+      return [connection, makeTables(connection, modelsJs.data.models.filter(m => m.system_created !== true))];
     })
     .spread(function (connection, res) {
       return [res, dataAccess.closeDbConnection(connection)];
@@ -50,26 +50,29 @@ module.exports = {
 }
 
 // MAKE THE SYSTEM TABLES
-function createInitialTables(connection) {
+function createInitialTables(connection, models) {
   var deferred = Q.defer();
 
-  var tbls = require('./InitialTables');
-  var modelTables = [tbls.credentials, tbls.session, tbls.bsuser];
-  var linkingTables = [{ 
-    'linking_table': 'bsuser_session', 
-    'left_table': 'bsuser', 
-    'right_table': 'session' 
-  }];
-  var toOneRels = [{
-    "relates_to": "credentials",
-    "plural_name": "credentials",
-    "relates_from": "bsuser",
-    "plural_rev": "bsusers",
-    "foreign_table": "credentials",
-    "to_one": true
-  }];
+  var linkingTables = [];
+  var toOneRels = [];
+  models.forEach((m) => {
+    if(m.hasOwnProperty('relationships')) {
+      m.relationships.forEach((r) => {
+        if(r.to_one === true) {
+          toOneRels.push(r);
+        }
+        else {
+          linkingTables.push({
+            linking_table: r.linking_table,
+            left_table: r.relates_from,
+            right_table: r.relates_to
+          });
+        }
+      });
+    }
+  });
 
-	Q.all(modelTables.map(function (mt) {
+	Q.all(models.map(function (mt) {
     var inner_deferred = Q.defer();
 
 		checkForTable(connection, mt.object_type)
@@ -241,7 +244,6 @@ function createDefaultUser(utilities) {
 	dataAccess.ExecutePostgresQuery(qry, qry_params, null)
   .then(function (connection) {
     if (connection.results.length === 0) {
-      // FIX THIS PROMISE CHAIN AND ADD A FAIL BLOCK
       utilities.getUID()
       .then(function (uid_forUser) {
         return [uid_forUser, utilities.getUID()];
@@ -582,7 +584,7 @@ function createTable(connection, tableDesc) {
   
   let tablesToSkip = ['bsuser', 'credentials', 'session'];
   if(!tablesToSkip.includes(tableName)) {
-    qry += "owner VARCHAR(64), " +
+    qry += "data_owner VARCHAR(64), " +
             "permittedUsers JSONB, " +
             "permittedGroups JSONB, ";
   }
@@ -665,7 +667,7 @@ function createLinkingTable(connection, tableName, leftTable, rightTable) {
 		"row_id SERIAL PRIMARY KEY, " +
 		"left_id VARCHAR(64) NOT NULL REFERENCES " + leftTable + "(id), " +
 		"right_id VARCHAR(64) NOT NULL REFERENCES " + rightTable + "(id), " +
-		"rel_type TEXT, " +
+		"rel_name TEXT, " +
 		"rel_props JSONB" +
 		");";
 	var qry_params = [];
@@ -696,7 +698,7 @@ function createLinkingTable(connection, tableName, leftTable, rightTable) {
 
 function addToOneRelationship(connection, tableName, relationship) {
   var deferred = Q.defer();
-  var qry = "ALTER TABLE " + tableName + " ADD COLUMN " + relationship.relates_to +
+  var qry = "ALTER TABLE " + tableName + " ADD COLUMN " + (relationship.name ? relationship.name : relationship.relates_to) +
              " VARCHAR(64) REFERENCES " + relationship.foreign_table + "(id)";
 	var qry_params = [];
 
