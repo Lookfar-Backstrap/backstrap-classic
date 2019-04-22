@@ -574,13 +574,13 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 	})
 	.fail(function(err) {
 		var errorObj = new ErrorObj(500,
-									'da0505',
-									__filename,
-									'ExecutePostgresQuery',
-									'error connecting to postgres',
-									'Database error',
-									err
-								);
+                                'da0505',
+                                __filename,
+                                'ExecutePostgresQuery',
+                                'error connecting to postgres',
+                                'Database error',
+                                err
+                              );
 		deferred.reject(errorObj);
 	});
 
@@ -609,34 +609,50 @@ function getModelForObjectType(ot) {
   }
 }
 
+function getTableAndModel(obj) {
+  var tableName = null;
+  var model = null;
+  // CHECK THE object_type TO GET THE APPROPRIATE TABLE
+  // IF NO object_type, THEN BAIL
+  if(obj.object_type == null || obj.object_type === '') {
+    return null;
+  }
+  else {
+    tableName = typeToTableMap[obj.object_type];
+    model = getModelForObjectType(obj.object_type);
+    return [tableName, model];
+  }
+}
+
+function psqlArray(inArray) {
+  return inArray.map(el => "'"+el+"'").join(',');
+}
+
 // tableName -- THE NAME OF THE TABLE TO SAVE THE ENTITY
 // obj -- THE ENTITY AS JSON INCLUDING THE 'object_type'
-//			'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
+// 'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
 // CREATE A NEW ENTITY
-DataAccess.prototype.createEntity = function (obj, connection, callback) {
+DataAccess.prototype.createEntity = function (obj, owner, read_users, write_users, read_groups, write_groups, connection, callback) {
   var deferred = Q.defer();
-  
+
   var tableName = null;
-  var selectedModel = null;
-  // CHECK THE object_type TO GET THE APPROPRIATE TABLE
-  if(obj.object_type == null || obj.object_type === '') {
+  var model = null;
+  var tm = getTableAndModel(obj);
+  if(tm === null) {
     var errorObj = new ErrorObj(500,
-      'da0212',
-      __filename,
-      'getEntity',
-      'object input must have an object_type property'
-    );
+                                'da0300',
+                                __filename,
+                                'createEntity',
+                                'unknown table or model',
+                                'There was a problem saving to the database'
+                              );
     deferred.reject(errorObj)
     deferred.promise.nodeify(callback);
     return deferred.promise;
   }
   else {
-    tableName = typeToTableMap[obj.object_type];
-    selectedModel = getModelForObjectType(obj.object_type);
-
-    if(tableName == null || selectedModel == null) {
-
-    }
+    tableName = tm[0];
+    model = tm[1];
   }
   
 	utilities.getUID()
@@ -644,8 +660,50 @@ DataAccess.prototype.createEntity = function (obj, connection, callback) {
     obj.id = uid_res;
     obj.created_at = new Date();
     obj.is_active = true;
-    var qry = "INSERT INTO \"" + tableName + "\"(\"data\") VALUES($1)";
-    var params = [obj];
+    
+    var props = model.properties.filter(p => p.nosql !== true).map(p => p.name);
+    var propsNoSql = model.properties.filter(p => p.nosql === true).map(p => p.name);
+    var data = {};
+    propsNoSql.forEach((p) => {data[p] = obj[p];});
+    var rels = model.relationships ? 
+      model.relationships.filter(r => r.to_one === true).map((r) => {
+        return r.name ? r.name : r.relates_to;
+      }) 
+    :
+      [];
+    rels.forEach((r) => {
+      props.push(r);
+    })
+
+    let permissions = {
+      read_users: read_users || [],
+      write_users: write_users || [],
+      read_groups: read_groups || [],
+      write_groups: write_groups || []
+    };
+    var params = [uid_res, obj.object_type, true, new Date(), JSON.stringify(data), owner, permissions];
+
+    var qry = "INSERT INTO \"" + tableName + "\"(id, object_type, is_active, created_at, data, data_owner, permissions";
+    var valuesStatement = "VALUES($1, $2, $3, $4, $5, $6, $7"
+    let sysFieldsPlus1 = 8;
+    if(props.length > 0) {
+      qry += ', ' + props.join(',');
+      for(var pIdx = sysFieldsPlus1; pIdx < props.length+sysFieldsPlus1; pIdx++) {
+        valuesStatement += ', $'+pIdx;
+        var matchingProp = model.properties.filter((p) => p.name === props[pIdx-sysFieldsPlus1])[0];
+        if(matchingProp != null && (matchingProp.data_type === 'object' || matchingProp.data_type === 'array' ||
+          matchingProp.db_type === 'JSONB')) {
+          
+          params.push(JSON.stringify(obj[props[pIdx-sysFieldsPlus1]]));
+        }
+        else {
+          params.push(obj[props[pIdx-sysFieldsPlus1]]);
+        }
+      }
+    }
+    qry += ") ";
+    valuesStatement += ")";
+    qry += valuesStatement;
     
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
 		.then(function (db_connection) {
@@ -667,19 +725,58 @@ DataAccess.prototype.t_createEntity = function (connection, tableName, obj, call
 // tableName -- NAME OF THE TABLE
 // obj -- AN ENTITY AS JSON WHICH INCLUDES AN 'id' FIELD ON WHICH TO MATCH
 // USED IF YOU NEED TO RE-FETCH AN ENTITY YOU ALREADY HAVE
-DataAccess.prototype.getEntity = function (tableName, obj, connection, callback) {
-	var deferred = Q.defer();
+DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
+  var deferred = Q.defer();
+  
+  var tableName = null;
+  var model = null;
+  var tm = getTableAndModel(obj);
+  if(tm === null) {
+    var errorObj = new ErrorObj(500,
+                                'da0300',
+                                __filename,
+                                'createEntity',
+                                'unknown table or model',
+                                'There was a problem saving to the database'
+                              );
+    deferred.reject(errorObj)
+    deferred.promise.nodeify(callback);
+    return deferred.promise;
+  }
+  else {
+    tableName = tm[0];
+    model = tm[1];
+  }
 
 	if (obj.id !== null) {
-		var qry = "SELECT * FROM \"" + tableName + "\" WHERE data @> '{\"id\": \"" + obj.id + "\", \"is_active\":true}'";
-		var params = [];
+    var qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+              ( \
+                permissions->'read_users' ? '*' OR \
+                permissions->'read_users' ? '"+user.id+"' OR \
+                (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
+              )";
+    var params = [obj.id];
+    
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
-			.then(function (connection) {
-				deferred.resolve(connection.results);
-			})
-			.fail(function (err) {
-				deferred.reject(err.AddToError(__filename, 'getEntity'));
-			})
+    .then(function (connection) {
+      if(connection.results.length === 1) {
+        deferred.resolve(connection.results[0]);
+      }
+      else if(connection.results.length === 0) {
+        deferred.resolve({});
+      }
+      else {
+        let errorObj = new ErrorObj(500,
+                                    'da0310',
+                                    __filename,
+                                    'getEntity',
+                                    'Found multiple entities with this id');
+        deferred.reject(errorObj);
+      }
+    })
+    .fail(function (err) {
+      deferred.reject(err.AddToError(__filename, 'getEntity'));
+    })
 	}
 	else {
 		releaseConnection(connection)

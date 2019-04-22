@@ -495,7 +495,7 @@ function makeTables(connection, models) {
       .then(function(dataType) {
         if(dataType === null) {
           // COLUMN DOESN'T EXIST
-          return addToOneRelationship(connection, rel.relates_to, rel);
+          return addToOneRelationship(connection, rel.relates_from, rel);
         }
         else {
           // FOR NOW JUST MOVE ON.  LATER WE MIGHT CHECK THE DATA TYPE
@@ -585,8 +585,9 @@ function createTable(connection, tableDesc) {
   let tablesToSkip = ['bsuser', 'credentials', 'session'];
   if(!tablesToSkip.includes(tableName)) {
     qry += "data_owner VARCHAR(64), " +
-            "permittedUsers JSONB, " +
-            "permittedGroups JSONB, ";
+            "permissions JSONB DEFAULT \
+            '{\"read_users\":[], \"write_users\":[], \
+            \"read_groups\":[], \"write_groups\":[]}'::jsonb, ";
   }
 
   
