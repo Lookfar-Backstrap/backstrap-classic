@@ -1,3 +1,55 @@
 {
-    "models": []
+    "models": [
+      {
+        "object_type": "car",
+        "relationships": [
+          {
+            "relates_to": "session",
+            "plural_name": "sessions",
+            "relates_from": "car",
+            "plural_rev": "cars",
+            "linking_table": "car_session",
+            "to_one": false
+          },
+          {
+            "relates_to": "bsuser",
+            "plural_name": "bsusers",
+            "relates_from": "car",
+            "plural_rev": "cars",
+            "foreign_table": "bsuser",
+            "to_one": true
+          }
+        ],
+        "properties": [
+          {
+            "name": "make",
+            "data_type": "string",
+            "required": true
+          },
+          {
+            "name": "model",
+            "data_type": "string",
+            "db_type": "VARCHAR(50)",
+            "required": true
+          },
+          {
+            "name": "year",
+            "data_type": "number",
+            "db_type": "INTEGER",
+            "required": true
+          },
+          {
+            "name": "color",
+            "data_type": "string",
+            "required": false,
+            "nosql": true
+          },
+          {
+            "name": "years_registered",
+            "data_type": "array",
+            "required": false
+          }
+        ]
+      }
+  ]
 }

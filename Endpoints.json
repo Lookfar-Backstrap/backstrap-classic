@@ -896,6 +896,607 @@
                     "isUserCreated": false
                 }
             ]
+        },
+        {
+            "name": "models",
+            "version": "1.0.0",
+            "methods": [
+                {
+                    "verb": "GET",
+                    "call": "car",
+                    "desc": "Returns car objects",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "make",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "model",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "year",
+                            "db_type": "INTEGER",
+                            "isRequired": false,
+                            "type": "number"
+                        },
+                        {
+                            "name": "color",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "years_registered",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "*",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "POST",
+                    "call": "car",
+                    "desc": "Adds a car object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "make",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "model",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "year",
+                            "db_type": "INTEGER",
+                            "isRequired": true,
+                            "type": "number"
+                        },
+                        {
+                            "name": "color",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "years_registered",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "PATCH",
+                    "call": "car",
+                    "desc": "Updates a car object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "make",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "model",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "year",
+                            "db_type": "INTEGER",
+                            "isRequired": false,
+                            "type": "number"
+                        },
+                        {
+                            "name": "color",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "years_registered",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "add_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        },
+                        {
+                            "name": "remove_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "DELETE",
+                    "call": "car",
+                    "desc": "Deletes a model object",
+                    "authRequired": true,
+                    "args": [],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "GET",
+                    "call": "credentials",
+                    "desc": "Returns credentials objects",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "password",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "salt",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "forgot_password_tokens",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "*",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "POST",
+                    "call": "credentials",
+                    "desc": "Adds a credentials object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "password",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "salt",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "forgot_password_tokens",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "PATCH",
+                    "call": "credentials",
+                    "desc": "Updates a credentials object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "password",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "salt",
+                            "db_type": "VARCHAR(200)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "forgot_password_tokens",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "add_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        },
+                        {
+                            "name": "remove_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "DELETE",
+                    "call": "credentials",
+                    "desc": "Deletes a model object",
+                    "authRequired": true,
+                    "args": [],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "GET",
+                    "call": "session",
+                    "desc": "Returns session objects",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "is_anonymous",
+                            "default": false,
+                            "isRequired": false,
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "token",
+                            "db_type": "VARCHAR(64)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "user_id",
+                            "db_type": "VARCHAR(64)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "started_at",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": false,
+                            "type": "date"
+                        },
+                        {
+                            "name": "client_info",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "object"
+                        },
+                        {
+                            "name": "last_touch",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": false,
+                            "type": "date"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "*",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "POST",
+                    "call": "session",
+                    "desc": "Adds a session object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "is_anonymous",
+                            "default": false,
+                            "isRequired": false,
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "token",
+                            "db_type": "VARCHAR(64)",
+                            "unique": true,
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "user_id",
+                            "db_type": "VARCHAR(64)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "started_at",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": true,
+                            "type": "date"
+                        },
+                        {
+                            "name": "client_info",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "object"
+                        },
+                        {
+                            "name": "last_touch",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": true,
+                            "type": "date"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "PATCH",
+                    "call": "session",
+                    "desc": "Updates a session object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "is_anonymous",
+                            "default": false,
+                            "isRequired": false,
+                            "type": "boolean"
+                        },
+                        {
+                            "name": "token",
+                            "db_type": "VARCHAR(64)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "user_id",
+                            "db_type": "VARCHAR(64)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "started_at",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": false,
+                            "type": "date"
+                        },
+                        {
+                            "name": "client_info",
+                            "nosql": true,
+                            "isRequired": false,
+                            "type": "object"
+                        },
+                        {
+                            "name": "last_touch",
+                            "db_type": "TIMESTAMP",
+                            "isRequired": false,
+                            "type": "date"
+                        },
+                        {
+                            "name": "add_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        },
+                        {
+                            "name": "remove_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "DELETE",
+                    "call": "session",
+                    "desc": "Deletes a model object",
+                    "authRequired": true,
+                    "args": [],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "GET",
+                    "call": "bsuser",
+                    "desc": "Returns bsuser objects",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "email",
+                            "db_type": "VARCHAR(100)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "roles",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "groups",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "first",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "last",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "*",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "POST",
+                    "call": "bsuser",
+                    "desc": "Adds a bsuser object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "unique": true,
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "email",
+                            "db_type": "VARCHAR(100)",
+                            "unique": true,
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "roles",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "groups",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "first",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "last",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "relates_to",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "PATCH",
+                    "call": "bsuser",
+                    "desc": "Updates a bsuser object",
+                    "authRequired": true,
+                    "args": [
+                        {
+                            "name": "username",
+                            "db_type": "VARCHAR(50)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "email",
+                            "db_type": "VARCHAR(100)",
+                            "unique": true,
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "roles",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "groups",
+                            "isRequired": false,
+                            "type": "array"
+                        },
+                        {
+                            "name": "first",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "last",
+                            "db_type": "VARCHAR(25)",
+                            "isRequired": false,
+                            "type": "string"
+                        },
+                        {
+                            "name": "add_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        },
+                        {
+                            "name": "remove_relationships",
+                            "type": "array",
+                            "isRequired": false
+                        }
+                    ],
+                    "isUserCreated": false
+                },
+                {
+                    "verb": "DELETE",
+                    "call": "bsuser",
+                    "desc": "Deletes a model object",
+                    "authRequired": true,
+                    "args": [],
+                    "isUserCreated": false
+                }
+            ]
         }
     ]
 }

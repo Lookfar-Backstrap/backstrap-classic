@@ -15,7 +15,6 @@ var Q = require('q');
 var fs = require('fs');
 var async = require('async');
 
-
 require('./ErrorObj');
 
 var Settings = require('./settings').Settings;
@@ -27,7 +26,6 @@ var Utilities = require('./utilities').Utilities;
 var AccessControl = require('./accessControl').AccessControl;
 var Models = require('./models.js').Models;
 var schemaControl = require('./schema.js');
-
 // ---------------------------------
 // SETUP EXPRESS
 // ---------------------------------
@@ -130,6 +128,27 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		var timeoutInMintues = settings.data.timeout;
 		var invalidSessionTimer = setInterval(function () { checkForInvalidSessions(dataAccess, settings) }, settings.data.timeout_check * 60000);
     
+    let carObj =  {
+      object_type: 'car',
+      make: 'mazda',
+      model: '3',
+      color: 'black',
+      year: 2013,
+      years_registered: [2013, 2014, 2015, 2016, 2017, 2018, 2019],
+      bsuser: 'db2011e0dd7251eeb523b47bae6572ea'
+    }
+    dataAccess.createEntity(carObj, carObj.bsuser, null, null, ['a'], null)
+    .then((res) => {
+      //console.log(res);
+      let obj = {id: res.id, object_type: 'car'};
+      return dataAccess.getEntity(obj,{id:'db2011e0dd7251eeb523b47bae6572ea', groups:['a']});
+    })
+    .then((get_res) => {
+      console.log(get_res);
+    })
+    .fail((err) => {
+      console.log(err);
+    });
 
 		// ========================================================
 		// SETUP ROUTE HANDLERS
