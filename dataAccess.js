@@ -60,7 +60,7 @@ var relationshipMap = [
 
 // THESE ARE SYSTEM FIELDS WHICH SHOULD NOT BE ALTERED MANUALLY. 
 // ALL ENTITIES INCLUDE THESE KEYS.
-var immutableKeys = ['row_id', 'id', 'object_type', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'data_owner', 'permitted_groups', 'permitted_users'];
+var immutableKeys = ['row_id', 'id', 'object_type', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'record_owner', 'permitted_groups', 'permitted_users'];
 
 // ================================================================================
 // CONSTRUCTOR
@@ -628,11 +628,51 @@ function psqlArray(inArray) {
   return inArray.map(el => "'"+el+"'").join(',');
 }
 
+function formatEntityResults(rawResults) {
+  var output = null;
+  if(Array.isArray(rawResults)) {
+    output = rawResults.map((r) => {
+      delete r.row_id;
+      delete r.is_active;
+      delete r.record_owner;
+      delete r.permissions;
+      delete r.deleted_at;
+
+      var keys = Object.getOwnPropertyNames(r.data);
+      keys.forEach((k) => {
+        r[k] = r.data[k];
+      });
+      delete r.data;
+
+      return r;
+    });
+  }
+  else if(typeof(rawResults) === 'object') {
+    delete rawResults.row_id;
+    delete rawResults.is_active;
+    delete rawResults.record_owner;
+    delete rawResults.permissions;
+    delete rawResults.deleted_at;
+
+    var keys = Object.getOwnPropertyNames(rawResults.data);
+    keys.forEach((k) => {
+      rawResults[k] = rawResults.data[k];
+    });
+    delete rawResults.data;
+
+    output = rawResults;
+  }
+  else {
+    output = rawResults;
+  }
+  return output;
+}
+
 // tableName -- THE NAME OF THE TABLE TO SAVE THE ENTITY
 // obj -- THE ENTITY AS JSON INCLUDING THE 'object_type'
 // 'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
 // CREATE A NEW ENTITY
-DataAccess.prototype.createEntity = function (obj, owner, read_users, write_users, read_groups, write_groups, connection, callback) {
+DataAccess.prototype.createEntity = function (obj, user, read_users, write_users, read_groups, write_groups, connection, callback) {
   var deferred = Q.defer();
 
   var tableName = null;
@@ -681,9 +721,9 @@ DataAccess.prototype.createEntity = function (obj, owner, read_users, write_user
       read_groups: read_groups || [],
       write_groups: write_groups || []
     };
-    var params = [uid_res, obj.object_type, true, new Date(), JSON.stringify(data), owner, permissions];
+    var params = [uid_res, obj.object_type, true, new Date(), JSON.stringify(data), user.id, permissions];
 
-    var qry = "INSERT INTO \"" + tableName + "\"(id, object_type, is_active, created_at, data, data_owner, permissions";
+    var qry = "INSERT INTO \"" + tableName + "\"(id, object_type, is_active, created_at, data, record_owner, permissions";
     var valuesStatement = "VALUES($1, $2, $3, $4, $5, $6, $7"
     let sysFieldsPlus1 = 8;
     if(props.length > 0) {
@@ -718,8 +758,8 @@ DataAccess.prototype.createEntity = function (obj, owner, read_users, write_user
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_createEntity = function (connection, tableName, obj, callback) {
-	return DataAccess.prototype.createEntity(tableName, obj, connection);
+DataAccess.prototype.t_createEntity = function (connection, obj, user, read_users, write_users, read_groups, write_groups, callback) {
+	return DataAccess.prototype.createEntity(obj, user, read_users, write_users, read_groups, write_groups, connection);
 };
 
 // tableName -- NAME OF THE TABLE
@@ -760,7 +800,7 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
     .then(function (connection) {
       if(connection.results.length === 1) {
-        deferred.resolve(connection.results[0]);
+        deferred.resolve(formatEntityResults(connection.results[0]));
       }
       else if(connection.results.length === 0) {
         deferred.resolve({});
@@ -795,8 +835,8 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_getEntity = function (connection, tableName, obj, callback) {
-  return DataAccess.prototype.getEntity(tableName, obj, connection)
+DataAccess.prototype.t_getEntity = function (connection, obj, user, callback) {
+  return DataAccess.prototype.getEntity(obj, user, connection)
 };
 
 // tableName -- NAME OF THE TABLE

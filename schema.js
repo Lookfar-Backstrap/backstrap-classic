@@ -584,7 +584,7 @@ function createTable(connection, tableDesc) {
   
   let tablesToSkip = ['bsuser', 'credentials', 'session'];
   if(!tablesToSkip.includes(tableName)) {
-    qry += "data_owner VARCHAR(64), " +
+    qry += "record_owner VARCHAR(64), " +
             "permissions JSONB DEFAULT \
             '{\"read_users\":[], \"write_users\":[], \
             \"read_groups\":[], \"write_groups\":[]}'::jsonb, ";
