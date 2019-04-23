@@ -21,7 +21,7 @@ dashboard.controller("ModelDataController", ['$rootScope', '$scope', '$state', '
         vm.query = { rels: [], props: [] };
 
         vm.model = backstrap_service.getSelectedModel();
-        $scope.backstrapSqlQuery = "select=" + vm.model.obj_type;
+        $scope.backstrapSqlQuery = "select=" + vm.model.object_type;
 
         vm.allModels = backstrap_service.getLocalModels();
       
@@ -83,7 +83,7 @@ dashboard.controller("ModelDataController", ['$rootScope', '$scope', '$state', '
                     parameters: []
                 };
                 vm.allModels.forEach(function (m) {
-                    if (m.obj_type === rel.relates_to) {
+                    if (m.object_type === rel.relates_to) {
                         m.properties.forEach(function (p) {
                             relToAdd.parameters.push({
                                 property: p.name,
@@ -118,7 +118,7 @@ dashboard.controller("ModelDataController", ['$rootScope', '$scope', '$state', '
             query += "{" +
                 "\"query_object\": {" +
                 "\"resolve\": [\"*\"]," +
-                "\"obj_type\": \"" + vm.model.obj_type + "\"," +
+                "\"object_type\": \"" + vm.model.object_type + "\"," +
                 "\"parameters\": [";
             var ix = 0;
             vm.query.props.forEach(function (p) {
@@ -136,7 +136,7 @@ dashboard.controller("ModelDataController", ['$rootScope', '$scope', '$state', '
             ix = 0;
             vm.query.rels.forEach(function (r) {
                 query += (ix == 0 ? "{" : ",{") +
-                    "\"obj_type\": \"" + r.relates_to + "\"," +
+                    "\"object_type\": \"" + r.relates_to + "\"," +
                     "\"rel_type\": \"" + r.lookup_rel_type + "\"," +
                     "\"parameters\": [";
                 var ixx = 0;
@@ -303,7 +303,7 @@ dashboard.controller("ModelDataController", ['$rootScope', '$scope', '$state', '
             console.log(queryItems);
             $scope.QueryResultItemsCount++;
             itemNameNumber++;
-            var titleOrig = vm.model.obj_type + ' ' + itemNameNumber;
+            var titleOrig = vm.model.object_type + ' ' + itemNameNumber;
             var qr = {
                 titleOrig: titleOrig,
                 title: titleOrig,

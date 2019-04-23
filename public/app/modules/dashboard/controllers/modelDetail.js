@@ -29,7 +29,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
         });
     }
     if (!canBeHere){
-          Flash.create('error', 'You do not have the correct permissions to view model: ' + vm.model.obj_type, 'large-text');
+          Flash.create('error', 'You do not have the correct permissions to view model: ' + vm.model.object_type, 'large-text');
            $state.go('app.modelList');
     }
     $scope.childRelationships = []; 
@@ -47,7 +47,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
     function loadModelRelationships(){
           $scope.relFilterGrid = [];
             allModels.forEach(function(m){      
-            if (m.obj_type === vm.model.obj_type){             
+            if (m.object_type === vm.model.object_type){             
                 m.relationships.forEach(function(r){
                     if (r['is_active'] === undefined || r['is_active'] === null){
                         r['is_active'] = true;    
@@ -67,8 +67,8 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
             } 
             else{
                   m.relationships.forEach(function(r){
-                        if (r.linking_table.indexOf(vm.model.obj_type) != -1 && r.relates_to !== m.obj_Type){                  
-                            $scope.childRelationships.push(m.obj_type);                
+                        if (r.linking_table.indexOf(vm.model.object_type) != -1 && r.relates_to !== m.object_type){                  
+                            $scope.childRelationships.push(m.object_type);                
                         }
                   });
             }
@@ -101,7 +101,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
                     relationship['is_active'] = true;         
                     try{
                         //relates_to is the object type. 
-                        delete relationship.obj_type;
+                        delete relationship.object_type;
                     } 
                     catch(err){
 
@@ -209,7 +209,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
 
     $scope.goToModel = function(parentModel){
          allModels.forEach(function(m){ 
-            if (m.obj_type === parentModel){
+            if (m.object_type === parentModel){
                 backstrap_service.setSelectedModel(m);    
                $state.reload();
             }
@@ -230,7 +230,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
         var objModels = backstrap_service.getLocalModels();                  
         vm.model.properties.forEach(function(prop, ix){                        
             objModels.forEach(function(model, ixx){
-                if (model.obj_type === vm.model.obj_type){
+                if (model.object_type === vm.model.object_type){
                     modelIxToUpdate = ixx;
                 }
             });            
@@ -271,7 +271,7 @@ function ($rootScope, $scope, $state, $location, backstrap_service, Flash, Modal
         templateUrl: '../../app/modules/dashboard/views/modelPropertyHint.html',
         controller: "ModelPropertyHintController",
         inputs: {
-            title: {obj_type: vm.model.obj_type, property: prop.name, hint: prop.hint},               
+            title: {object_type: vm.model.object_type, property: prop.name, hint: prop.hint},               
         }
         }).then(function(modal) {
             modal.element.modal();

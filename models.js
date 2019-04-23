@@ -6,7 +6,9 @@ var bucket = null;
 var file = null;
 var remoteSettings = null;
 var settings
-var utilities; 
+var utilities;
+
+var systemModels = require('./SystemModels');
 
 var Models = function(s, u) {
 	s3 = new AWS.S3();
@@ -23,7 +25,14 @@ Models.prototype.init = function(b, f, rs) {
 	if(utilities.isNullOrUndefined(remoteSettings) || remoteSettings === false) {
 		try {
 			if(file.substring(0,2) !== './') file = './'+file;
-			Models.prototype.data = require(file);
+      var f = require(file);
+      let smKeys = Object.getOwnPropertyNames(systemModels);
+      smKeys.forEach((smKey) => {
+        var sm = systemModels[smKey];
+        sm.system_created = true;
+        f.models.push(sm);
+      });
+      Models.prototype.data = f;
 			deferred.resolve(true);
 		}
 		catch(e) {
@@ -42,7 +51,13 @@ Models.prototype.init = function(b, f, rs) {
 		s3.getObject({Bucket: bucket, Key: file}, function(err, res) {
 			if(!err) {
 				var f = JSON.parse(res.Body.toString());
-				Models.prototype.data = f;
+        let smKeys = Object.getOwnPropertyNames(systemModels);
+        smKeys.forEach((smKey) => {
+          var sm = systemModels[smKey];
+          sm.system_created = true;
+          f.models.push(sm);
+        });
+        Models.prototype.data = f;
 				deferred.resolve(true);
 			}
 			else {

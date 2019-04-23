@@ -13,7 +13,7 @@ EntityMethods = function (da, m) {
 	models = m;
 };
 
-EntityMethods.prototype.ExecuteBackstrapQuery = function (obj_type, offset, range, objQuery, resolveRels, relsToResolve) {
+EntityMethods.prototype.ExecuteBackstrapQuery = function (object_type, offset, range, objQuery, resolveRels, relsToResolve) {
 	var deferred = Q.defer();
 
 	dataAccess.getDbConnection()
@@ -173,7 +173,7 @@ EntityMethods.prototype.ExecuteBackstrapQuery = function (obj_type, offset, rang
 	return deferred.promise;
 };
 
-EntityMethods.prototype.get = function (obj_type, offset, range, objQuery, resolveRels, relsToResolve) {
+EntityMethods.prototype.get = function (object_type, offset, range, objQuery, resolveRels, relsToResolve) {
 	var deferred = Q.defer();
 
 	dataAccess.getDbConnection()
@@ -334,7 +334,7 @@ EntityMethods.prototype.get = function (obj_type, offset, range, objQuery, resol
 	return deferred.promise;
 };
 
-EntityMethods.prototype.getActive = function (obj_type, offset, range, objQuery, resolveRels, relsToResolve) {
+EntityMethods.prototype.getActive = function (object_type, offset, range, objQuery, resolveRels, relsToResolve) {
 	var deferred = Q.defer();
 	var client;
 
@@ -499,8 +499,8 @@ EntityMethods.prototype.getActive = function (obj_type, offset, range, objQuery,
 EntityMethods.prototype.create = function (obj, obj_relationships) {
 	var dh = this;
 	models.data.models.forEach(function (m) {
-		if (m.obj_type === obj.object_type) {
-			dataAccess.AddTypeToCollectionMap(obj.object_type, obj.object_type);
+		if (m.object_type === obj.object_type) {
+			dataAccess.AddTypeToTableMap(obj.object_type, obj.object_type);
 			m.relationships.forEach(function (r) {
 				var relTo = r.relates_to;
 				var relMapObj = {
@@ -513,10 +513,10 @@ EntityMethods.prototype.create = function (obj, obj_relationships) {
 		}
 	});
 	var deferred = Q.defer();
-	var obj_type = obj["object_type"];
+	var object_type = obj["object_type"];
 	dataAccess.startTransaction()
 		.then(function (client) {
-			return [client, dataAccess.t_saveEntity(client, obj_type, obj)];
+			return [client, dataAccess.t_saveEntity(client, object_type, obj)];
 		})
 		.spread(function (client, save_res) {
 			if (obj_relationships !== null && obj_relationships.length > 0) {
@@ -581,13 +581,13 @@ EntityMethods.prototype.create = function (obj, obj_relationships) {
 };
 
 EntityMethods.prototype.update = function (obj, obj_add_rel, obj_remove_rel) {
-	var obj_type = obj['object_type'];
+	var object_type = obj['object_type'];
 	var deferred = Q.defer();
 	if (obj_add_rel === null) obj_add_rel = [];
 	if (obj_remove_rel === null) obj_remove_rel = [];
 	models.data.models.forEach(function (m) {
-		if (m.obj_type === obj.object_type) {
-			dataAccess.AddTypeToCollectionMap(obj.object_type, obj.object_type);
+		if (m.object_type === obj.object_type) {
+			dataAccess.AddTypeToTableMap(obj.object_type, obj.object_type);
 			m.relationships.forEach(function (r) {
 				var relMapObj = {
 					'type1': obj.object_type,
@@ -600,7 +600,7 @@ EntityMethods.prototype.update = function (obj, obj_add_rel, obj_remove_rel) {
 	});
 	dataAccess.startTransaction()
 		.then(function (client) {
-			return [client, dataAccess.t_updateEntity(client, obj_type, obj)];
+			return [client, dataAccess.t_updateEntity(client, object_type, obj)];
 		})
 		.spread(function (client, update_res, addRel_res) {
 			if (obj_remove_rel.length > 0) {
@@ -695,10 +695,10 @@ EntityMethods.prototype.update = function (obj, obj_add_rel, obj_remove_rel) {
 	return deferred.promise;
 };
 
-EntityMethods.prototype.delete = function (obj_type, obj) {
+EntityMethods.prototype.delete = function (object_type, obj) {
 	var deferred = Q.defer();
 
-	dataAccess.deleteEntity(obj_type, obj)
+	dataAccess.deleteEntity(object_type, obj)
 		.then(function (del_res) {
 			deferred.resolve(del_res);
 		})
@@ -748,7 +748,7 @@ EntityMethods.prototype.rr = function (obj, relsToResolve, idx, resolvedRelList)
 	var objModel;
 	if (objType === 'bsuser') {
 		objModel = {
-			'obj_type': 'bsuser',
+			'object_type': 'bsuser',
 			'description': 'This is a user',
 			'relationships': [],
 			'properties': []
@@ -756,7 +756,7 @@ EntityMethods.prototype.rr = function (obj, relsToResolve, idx, resolvedRelList)
 	}
 	else {
 		for (var mIdx = 0; mIdx < models.data.models.length; mIdx++) {
-			if (objType === models.data.models[mIdx].obj_type) {
+			if (objType === models.data.models[mIdx].object_type) {
 				objModel = models.data.models[mIdx];
 				break;
 			}
@@ -792,7 +792,7 @@ EntityMethods.prototype.rr = function (obj, relsToResolve, idx, resolvedRelList)
 			for (var rIdx = 0; rIdx < model.relationships.length; rIdx++) {
 				var r = model.relationships[rIdx];
 
-				if (r.relates_to === objModel.obj_type && (resolveAllRels || relsToResolve.indexOf(r.relates_from) !== -1)) {
+				if (r.relates_to === objModel.object_type && (resolveAllRels || relsToResolve.indexOf(r.relates_from) !== -1)) {
 					allRelationships.push(r);
 				}
 			}
@@ -899,7 +899,7 @@ EntityMethods.prototype.rr = function (obj, relsToResolve, idx, resolvedRelList)
 									}
 
 									var argName = relationshipDescriptor.plural_name;
-									if (relationshipDescriptor.relates_to === objModel.obj_type) {
+									if (relationshipDescriptor.relates_to === objModel.object_type) {
 										argName = relationshipDescriptor.plural_rev;
 									}
 									obj[argName] = relObjs;
@@ -1002,7 +1002,7 @@ EntityMethods.prototype.t_rr = function (client, obj, relsToResolve, idx, resolv
 	var objModel;
 	if (objType === 'bsuser') {
 		objModel = {
-			'obj_type': 'bsuser',
+			'object_type': 'bsuser',
 			'description': 'This is a user',
 			'relationships': [],
 			'properties': []
@@ -1010,7 +1010,7 @@ EntityMethods.prototype.t_rr = function (client, obj, relsToResolve, idx, resolv
 	}
 	else {
 		for (var mIdx = 0; mIdx < models.data.models.length; mIdx++) {
-			if (objType === models.data.models[mIdx].obj_type) {
+			if (objType === models.data.models[mIdx].object_type) {
 				objModel = models.data.models[mIdx];
 				break;
 			}
@@ -1046,7 +1046,7 @@ EntityMethods.prototype.t_rr = function (client, obj, relsToResolve, idx, resolv
 			for (var rIdx = 0; rIdx < model.relationships.length; rIdx++) {
 				var r = model.relationships[rIdx];
 
-				if (r.relates_to === objModel.obj_type && (resolveAllRels || relsToResolve.indexOf(r.relates_from) !== -1)) {
+				if (r.relates_to === objModel.object_type && (resolveAllRels || relsToResolve.indexOf(r.relates_from) !== -1)) {
 					allRelationships.push(r);
 				}
 			}
@@ -1152,7 +1152,7 @@ EntityMethods.prototype.t_rr = function (client, obj, relsToResolve, idx, resolv
 							}
 
 							var argName = relationshipDescriptor.plural_name;
-							if (relationshipDescriptor.relates_to === objModel.obj_type) {
+							if (relationshipDescriptor.relates_to === objModel.object_type) {
 								argName = relationshipDescriptor.plural_rev;
 							}
 							obj[argName] = relObjs;
@@ -1179,7 +1179,7 @@ function getModelForObject(objType) {
 	var objModel;
 	if (objType === 'bsuser') {
 		objModel = {
-			'obj_type': 'bsuser',
+			'object_type': 'bsuser',
 			'description': 'This is a user',
 			'relationships': [],
 			'properties': []
@@ -1187,7 +1187,7 @@ function getModelForObject(objType) {
 	}
 	else {
 		for (var mIdx = 0; mIdx < models.data.models.length; mIdx++) {
-			if (objType === models.data.models[mIdx].obj_type) {
+			if (objType === models.data.models[mIdx].object_type) {
 				objModel = models.data.models[mIdx];
 				break;
 			}
@@ -1214,7 +1214,7 @@ function getAllRelationships(objModel) {
 			for (var rIdx = 0; rIdx < model.relationships.length; rIdx++) {
 				var r = model.relationships[rIdx];
 
-				if (r.relates_to === objModel.obj_type) {
+				if (r.relates_to === objModel.object_type) {
 					allRelationships.push(r);
 				}
 			}
@@ -1312,7 +1312,7 @@ function getAllRelationships(objModel) {
 // 						}
 
 // 						var argName = relationshipDescriptor.plural_name;
-// 						if (relationshipDescriptor.relates_to === currentModel.obj_type) {
+// 						if (relationshipDescriptor.relates_to === currentModel.object_type) {
 // 							argName = relationshipDescriptor.plural_rev;
 // 						}
 // 						currentObj[argName] = relObjs;

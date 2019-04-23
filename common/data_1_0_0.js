@@ -108,7 +108,7 @@ Data.prototype.post = {
         var deferred = Q.defer();
         var args = req.body;
         var objQuery = args.query_object;
-        var objType = objQuery.obj_type;
+        var objType = objQuery.object_type;
         var resolveRels = objQuery.resolve;
         if (resolveRels === undefined || resolveRels === null) {
             resolveRels = true;
@@ -144,7 +144,7 @@ Data.prototype.post = {
         var deferred = Q.defer();
         var args = req.body;
         var objUpdate = args.update_all_object;
-        var objType = objUpdate.obj_type;
+        var objType = objUpdate.object_type;
         dataAccess.UpdateAllEntities(objUpdate, null)
             .then(function (query_res) {
                 var resolveObj = query_res;

@@ -15,7 +15,7 @@
 // 'immutableKeys' describes all fields in an entity which should only be
 // manipulated by the system (aside from assigning object_type the first time).
 // 
-// 'object_type' is mapped to db table using the 'typeToCollectionMap' array which
+// 'object_type' is mapped to db table using the 'typeToTableMap' array which
 // is initialized in the constructor here and maintained in memory.
 //
 // All possible relationships between two entities of 'object_type' x and y are
@@ -43,11 +43,10 @@ var dbConnection;
 var pool;
 
 // KEEPS TRACK OF THE TABLE NAME FOR EACH object_type.
-var typeToCollectionMap = {
+var typeToTableMap = {
 	'bsuser': 'bsuser',
-	'session': 'session',
-	'analytics': 'analytics',
-	'webServiceCallDescriptor': 'service_call'
+  'session': 'session',
+  'credentials': 'credentials'
 };
 
 // KEEPS TRACK OF WHICH LINKING TABLE GOES WITH WHICH RELATIONSHIP
@@ -56,24 +55,19 @@ var relationshipMap = [
 		'type1': 'bsuser',
 		'type2': 'session',
 		'linkingTable': 'bsuser_session'
-	},
-	{
-		'type1': 'bsuser',
-		'type2': 'analytics',
-		'linkingTable': 'bsuser_analytics'
 	}
 ];
 
 // THESE ARE SYSTEM FIELDS WHICH SHOULD NOT BE ALTERED MANUALLY. 
 // ALL ENTITIES INCLUDE THESE KEYS.
-var immutableKeys = ['id', 'object_type', 'is_active', 'created_at', 'updated_at'];
+var immutableKeys = ['row_id', 'id', 'object_type', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'record_owner', 'permitted_groups', 'permitted_users'];
 
 // ================================================================================
 // CONSTRUCTOR
 // ------------------------------------------------------------------
 // Create the class, setup pg, instantiate the extension
 // file, and setup backstrapSql.  Fill out the relationshipMap 
-// and the typeToCollectionMap
+// and the typeToTableMap
 // ------------------------------------------------------------------
 var DataAccess = function (dbConfig, mdls, util) {
 	utilities = util;
@@ -93,18 +87,21 @@ var DataAccess = function (dbConfig, mdls, util) {
 	models = mdls;
 	backstrapSql = new BackstrapSql(models);
 
-	// RUN THROUGH THE MODELS AND ADD ENTRIES TO THE typeToCollectionMap
+	// RUN THROUGH THE MODELS AND ADD ENTRIES TO THE typeToTableMap
 	// AND THE relationshipMap
 	for (var mIdx = 0; mIdx < models.length; mIdx++) {
 		var model = models[mIdx];
-		this.AddTypeToCollectionMap(model.obj_type, model.obj_type);
+		this.AddTypeToTableMap(model.object_type, model.object_type);
 
 		for (var rIdx = 0; rIdx < model.relationships.length; rIdx++) {
-			var r = model.relationships[rIdx];
+      var r = model.relationships[rIdx];
+      
 			var relMapObj = {
-				'type1': model.obj_type,
+        'toOne': (r.to_one === true ? true : false),
+        'type1': model.object_type,
 				'type2': r.relates_to,
-				'linkingTable': r.linking_table
+        'linkingTable': (r.linking_table ? r.linking_table : null),
+        'foreignTable': (r.foreign_table ? r.foreign_table : null)
 			};
 			this.AddRelationshipMap(relMapObj);
 		}
@@ -117,12 +114,12 @@ var DataAccess = function (dbConfig, mdls, util) {
 // Functions for adding descriptors to the relationship-to-linking
 // table map and the type-to-table map
 // ------------------------------------------------------------------
-// ADD A DESCRIPTOR TO THE RELATIONSHIP MAP FROM OUTSIDE DataAccess
+// ADD A DESCRIPTOR TO THE RELATIONSHIP MAP
 DataAccess.prototype.AddRelationshipMap = function (rel) {
 	var doAdd = true;
 	relationshipMap.forEach(function (rm) {
-		if (rm.linkingTable === rel.linkingTable) {
-			doAdd = false;
+		if (rm.linkingTable != null && rm.linkingTable === rel.linkingTable) {
+      doAdd = false;
 		}
 	});
 	if (doAdd) {
@@ -130,9 +127,9 @@ DataAccess.prototype.AddRelationshipMap = function (rel) {
 	}
 };
 
-// ADD A DESCRIPTOR TO THE TYPE MAP FROM OUTSIDE DataAccess
-DataAccess.prototype.AddTypeToCollectionMap = function (key, value) {
-	typeToCollectionMap[key] = value;
+// ADD A DESCRIPTOR TO THE TYPE MAP
+DataAccess.prototype.AddTypeToTableMap = function (key, value) {
+	typeToTableMap[key] = value;
 };
 
 // ================================================================================
@@ -447,30 +444,68 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 		includeRowId = false;
 	}
 
-
-
 	resolveDbConnection(connection)
 	.then(function(db_connection) {
 
-		// PERFORM THE QUERY
+    // PERFORM THE QUERY
 		db_connection.client.query(pg_query)
 		.then(function(res) {
 			db_connection.results = res.rows;
-			//THE NEW pg 7 NPM PACKAGE RETURNS ROW QUERIES WITH THE KEY data FOR EACH ROW
-			//WE ONLY WANT THE JSON OBJECT VALUE NOT THE KEY
-			if (db_connection.results !== undefined && db_connection.results !== null && db_connection.results.length > 0) {
-				var result = db_connection.results[0];
-				var keys = Object.keys(result);
-				if ((keys.length === 1 && keys[0] === 'data' && includeRowId !== true)
-					|| (keys.length == 2 && keys[0] === 'row_id' && keys[1] === 'data' && includeRowId !== true)) {
-					db_connection.results = db_connection.results.map(r => r.data);
-				}
+      // UNPACK ANY JSON FIELDS & STUFF THE FINAL OBJECT WITH 
+      // KEYS FROM `data` FIELD
+			if (db_connection.results !== undefined && db_connection.results !== null) {
+        if(db_connection.results.length > 0) {
+          db_connection.results = db_connection.results.map((r) =>{
+            var formattedResult = {};
+            
+            if(!includeRowId) delete r.row_id;
+
+            let resKeys = Object.getOwnPropertyNames(r);
+            resKeys.forEach((k) => {
+              if(k === 'data') {
+                try {
+                  let dataObj = JSON.parse(r[k]);
+                  let dataKeys = Object.getOwnPropertyNames(r);
+                  dataKeys.forEach((dk) => {
+                    if(resKeys.includes(dk)) {
+                      let newKey = dk+'_fromJSON';
+                      formattedResult[newKey] = dataObj[dk];
+                    }
+                    else {
+                      formattedResult[dk] = dataObj[dk];
+                    }
+                  });
+                }
+                catch(e) {
+                  // problem parsing the `data` field...just move on
+                }
+              }
+              else if(typeof(r[k] === 'string')) {
+                try {
+                  var jsonVal = JSON.parse(r[k]);
+                  formattedResult[k] = jsonVal;
+                }
+                catch(e) {
+                  formattedResult[k] = r[k];
+                }
+              }
+              else {
+                formattedResult[k] = r[k];
+              }
+            });
+
+            return formattedResult;
+          });
+        }
+        else {
+          db_connection.results = [];
+        }
 			}
 
 			// IF THE ARG connection PASSED INTO THE FUNCTION IS null/undefined
 			// THIS IS A ONE-OFF AND WE MUST SHUT DOWN THE CONNECTION WE MADE
 			// BEFORE RETURNING THE RESULTS
-			if(utilities.isNullOrUndefined(connection)) {
+			if(connection != null) {
 				releaseConnection(db_connection)
 				.then(function() {
 					deferred.resolve(db_connection);
@@ -539,13 +574,13 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 	})
 	.fail(function(err) {
 		var errorObj = new ErrorObj(500,
-									'da0505',
-									__filename,
-									'ExecutePostgresQuery',
-									'error connecting to postgres',
-									'Database error',
-									err
-								);
+                                'da0505',
+                                __filename,
+                                'ExecutePostgresQuery',
+                                'error connecting to postgres',
+                                'Database error',
+                                err
+                              );
 		deferred.reject(errorObj);
 	});
 
@@ -564,21 +599,151 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 // deleteEntity() flips the is_active field of an entity to false
 // while hardDeleteEntity actually removes it from the db.
 // ------------------------------------------------------------------
+function getModelForObjectType(ot) {
+  var matchingModels = models.filter(m => m.object_type === ot);
+  if(matchingModels.length > 0) {
+    return matchingModels[0];
+  }
+  else {
+    return null;
+  }
+}
+
+function getTableAndModel(obj) {
+  var tableName = null;
+  var model = null;
+  // CHECK THE object_type TO GET THE APPROPRIATE TABLE
+  // IF NO object_type, THEN BAIL
+  if(obj.object_type == null || obj.object_type === '') {
+    return null;
+  }
+  else {
+    tableName = typeToTableMap[obj.object_type];
+    model = getModelForObjectType(obj.object_type);
+    return [tableName, model];
+  }
+}
+
+function psqlArray(inArray) {
+  return inArray.map(el => "'"+el+"'").join(',');
+}
+
+function formatEntityResults(rawResults) {
+  var output = null;
+  if(Array.isArray(rawResults)) {
+    output = rawResults.map((r) => {
+      delete r.row_id;
+      delete r.is_active;
+      delete r.record_owner;
+      delete r.permissions;
+      delete r.deleted_at;
+
+      var keys = Object.getOwnPropertyNames(r.data);
+      keys.forEach((k) => {
+        r[k] = r.data[k];
+      });
+      delete r.data;
+
+      return r;
+    });
+  }
+  else if(typeof(rawResults) === 'object') {
+    delete rawResults.row_id;
+    delete rawResults.is_active;
+    delete rawResults.record_owner;
+    delete rawResults.permissions;
+    delete rawResults.deleted_at;
+
+    var keys = Object.getOwnPropertyNames(rawResults.data);
+    keys.forEach((k) => {
+      rawResults[k] = rawResults.data[k];
+    });
+    delete rawResults.data;
+
+    output = rawResults;
+  }
+  else {
+    output = rawResults;
+  }
+  return output;
+}
 
 // tableName -- THE NAME OF THE TABLE TO SAVE THE ENTITY
 // obj -- THE ENTITY AS JSON INCLUDING THE 'object_type'
-//			'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
+// 'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
 // CREATE A NEW ENTITY
-DataAccess.prototype.createEntity = function (tableName, obj, connection, callback) {
-	var deferred = Q.defer();
-	
+DataAccess.prototype.createEntity = function (obj, user, read_users, write_users, read_groups, write_groups, connection, callback) {
+  var deferred = Q.defer();
+
+  var tableName = null;
+  var model = null;
+  var tm = getTableAndModel(obj);
+  if(tm === null) {
+    var errorObj = new ErrorObj(500,
+                                'da0300',
+                                __filename,
+                                'createEntity',
+                                'unknown table or model',
+                                'There was a problem saving to the database'
+                              );
+    deferred.reject(errorObj)
+    deferred.promise.nodeify(callback);
+    return deferred.promise;
+  }
+  else {
+    tableName = tm[0];
+    model = tm[1];
+  }
+  
 	utilities.getUID()
 	.then(function (uid_res) {
     obj.id = uid_res;
     obj.created_at = new Date();
     obj.is_active = true;
-    var qry = "INSERT INTO \"" + tableName + "\"(\"data\") VALUES($1)";
-    var params = [obj];
+    
+    var props = model.properties.filter(p => p.nosql !== true).map(p => p.name);
+    var propsNoSql = model.properties.filter(p => p.nosql === true).map(p => p.name);
+    var data = {};
+    propsNoSql.forEach((p) => {data[p] = obj[p];});
+    var rels = model.relationships ? 
+      model.relationships.filter(r => r.to_one === true).map((r) => {
+        return r.name ? r.name : r.relates_to;
+      }) 
+    :
+      [];
+    rels.forEach((r) => {
+      props.push(r);
+    })
+
+    let permissions = {
+      read_users: read_users || [],
+      write_users: write_users || [],
+      read_groups: read_groups || [],
+      write_groups: write_groups || []
+    };
+    var params = [uid_res, obj.object_type, true, new Date(), JSON.stringify(data), user.id, permissions];
+
+    var qry = "INSERT INTO \"" + tableName + "\"(id, object_type, is_active, created_at, data, record_owner, permissions";
+    var valuesStatement = "VALUES($1, $2, $3, $4, $5, $6, $7"
+    let sysFieldsPlus1 = 8;
+    if(props.length > 0) {
+      qry += ', ' + props.join(',');
+      for(var pIdx = sysFieldsPlus1; pIdx < props.length+sysFieldsPlus1; pIdx++) {
+        valuesStatement += ', $'+pIdx;
+        var matchingProp = model.properties.filter((p) => p.name === props[pIdx-sysFieldsPlus1])[0];
+        if(matchingProp != null && (matchingProp.data_type === 'object' || matchingProp.data_type === 'array' ||
+          matchingProp.db_type === 'JSONB')) {
+          
+          params.push(JSON.stringify(obj[props[pIdx-sysFieldsPlus1]]));
+        }
+        else {
+          params.push(obj[props[pIdx-sysFieldsPlus1]]);
+        }
+      }
+    }
+    qry += ") ";
+    valuesStatement += ")";
+    qry += valuesStatement;
     
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
 		.then(function (db_connection) {
@@ -593,26 +758,65 @@ DataAccess.prototype.createEntity = function (tableName, obj, connection, callba
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_createEntity = function (connection, tableName, obj, callback) {
-	return DataAccess.prototype.createEntity(tableName, obj, connection);
+DataAccess.prototype.t_createEntity = function (connection, obj, user, read_users, write_users, read_groups, write_groups, callback) {
+	return DataAccess.prototype.createEntity(obj, user, read_users, write_users, read_groups, write_groups, connection);
 };
 
 // tableName -- NAME OF THE TABLE
 // obj -- AN ENTITY AS JSON WHICH INCLUDES AN 'id' FIELD ON WHICH TO MATCH
 // USED IF YOU NEED TO RE-FETCH AN ENTITY YOU ALREADY HAVE
-DataAccess.prototype.getEntity = function (tableName, obj, connection, callback) {
-	var deferred = Q.defer();
+DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
+  var deferred = Q.defer();
+  
+  var tableName = null;
+  var model = null;
+  var tm = getTableAndModel(obj);
+  if(tm === null) {
+    var errorObj = new ErrorObj(500,
+                                'da0300',
+                                __filename,
+                                'createEntity',
+                                'unknown table or model',
+                                'There was a problem saving to the database'
+                              );
+    deferred.reject(errorObj)
+    deferred.promise.nodeify(callback);
+    return deferred.promise;
+  }
+  else {
+    tableName = tm[0];
+    model = tm[1];
+  }
 
 	if (obj.id !== null) {
-		var qry = "SELECT * FROM \"" + tableName + "\" WHERE data @> '{\"id\": \"" + obj.id + "\", \"is_active\":true}'";
-		var params = [];
+    var qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+              ( \
+                permissions->'read_users' ? '*' OR \
+                permissions->'read_users' ? '"+user.id+"' OR \
+                (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
+              )";
+    var params = [obj.id];
+    
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
-			.then(function (connection) {
-				deferred.resolve(connection.results);
-			})
-			.fail(function (err) {
-				deferred.reject(err.AddToError(__filename, 'getEntity'));
-			})
+    .then(function (connection) {
+      if(connection.results.length === 1) {
+        deferred.resolve(formatEntityResults(connection.results[0]));
+      }
+      else if(connection.results.length === 0) {
+        deferred.resolve({});
+      }
+      else {
+        let errorObj = new ErrorObj(500,
+                                    'da0310',
+                                    __filename,
+                                    'getEntity',
+                                    'Found multiple entities with this id');
+        deferred.reject(errorObj);
+      }
+    })
+    .fail(function (err) {
+      deferred.reject(err.AddToError(__filename, 'getEntity'));
+    })
 	}
 	else {
 		releaseConnection(connection)
@@ -631,8 +835,8 @@ DataAccess.prototype.getEntity = function (tableName, obj, connection, callback)
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_getEntity = function (connection, tableName, obj, callback) {
-  return DataAccess.prototype.getEntity(tableName, obj, connection)
+DataAccess.prototype.t_getEntity = function (connection, obj, user, callback) {
+  return DataAccess.prototype.getEntity(obj, user, connection)
 };
 
 // tableName -- NAME OF THE TABLE
@@ -979,7 +1183,7 @@ DataAccess.prototype.UpdateAllEntities = function (updateAllObject, connection, 
 	var qryWhere = " WHERE data->>'id' IN ('abcdefg'"; // this is so my where clause can all start with , 
 
 	//distinct because in the case of location, mikes house may be both pick up and drop off.
-	qryUpdate = "UPDATE " + updateAllObject.obj_type + " SET data = JSONB_SET(data,'{" + updateAllObject.property + "}', '\"" + updateAllObject.value + "\"', false)";
+	qryUpdate = "UPDATE " + updateAllObject.object_type + " SET data = JSONB_SET(data,'{" + updateAllObject.property + "}', '\"" + updateAllObject.value + "\"', false)";
 
 	var ix = 0;
 	updateAllObject.ids.forEach(function (id) {
@@ -1089,7 +1293,7 @@ DataAccess.prototype.t_find = function (connection, tableName, searchObject, cal
 DataAccess.prototype.findByObjType = function (objType, searchObject, connection, callback) {
 	var deferred = Q.defer();
 
-	var tbl = typeToCollectionMap[objType.toLowerCase()];
+	var tbl = typeToTableMap[objType.toLowerCase()];
 	if (tbl === undefined || tbl === null) {
 		releaseConnection(connection)
 		.then(function() {
@@ -1367,15 +1571,15 @@ DataAccess.prototype.t_findBetweenDates = function (connection, tableName, dateF
 // You can add a relationship between entities, remove a relationship
 // or get the related entities.
 //
-// relType is 'default' if none is specified
+// relName is 'default' if none is specified
 // ------------------------------------------------------------------
 // entity1 -- ONE ENTITY IN THE RELATIONSHIP
 //				REQUIRES AT LEAST 'object_type' AND 'id'
 // entity2 -- THE OTHER ENTITY IN THE RELATIONSHIP
 //				REQUIRES AT LEAST 'object_type' AND 'id'
-// relType -- NAME OR TYPE FOR THIS RELATIONSHIP
+// relName -- NAME OR TYPE FOR THIS RELATIONSHIP
 // THIS CREATES A NAMED RELATIONSHIP BETWEEN THE TWO SPECIFIED ENTITIES
-DataAccess.prototype.addRelationship = function (entity1, entity2, relType, connection, rel_props, callback) {
+DataAccess.prototype.addRelationship = function (entity1, entity2, relName, connection, rel_props, callback) {
 	var deferred = Q.defer();
 
 	if (entity1.id !== null && entity2.id !== null && entity1.object_type !== null && entity2.object_type !== null) {
@@ -1410,8 +1614,8 @@ DataAccess.prototype.addRelationship = function (entity1, entity2, relType, conn
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var entity1Collection = typeToCollectionMap[entity1.object_type];
-		var entity2Collection = typeToCollectionMap[entity2.object_type];
+		var entity1Collection = typeToTableMap[entity1.object_type];
+		var entity2Collection = typeToTableMap[entity2.object_type];
 		if (entity1Collection === null || entity2Collection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -1493,27 +1697,27 @@ DataAccess.prototype.addRelationship = function (entity1, entity2, relType, conn
 						// GOT ENTITY 2
 						e2_rowId = connection.results[0].row_id;
 						// CHECK IF THIS RELATIONSHIP ALREADY EXISTS
-						var rel_qry = "SELECT * FROM \"" + linkingTable + "\" WHERE left_id = $1 AND right_id = $2 AND rel_type = $3";
+						var rel_qry = "SELECT * FROM \"" + linkingTable + "\" WHERE left_id = $1 AND right_id = $2 AND rel_name = $3";
 						var rel_qry_params = [];
 						if (rel_props === undefined || rel_props === null) {
 							rel_props = null;
 						}
-						if (relType === undefined || relType === null) {
+						if (relName === undefined || relName === null) {
 							rel_qry_params = [e1_rowId, e2_rowId, 'default'];
 						}
 						else {
-							rel_qry_params = [e1_rowId, e2_rowId, relType];
+							rel_qry_params = [e1_rowId, e2_rowId, relName];
 						}
 						DataAccess.prototype.ExecutePostgresQuery(rel_qry, rel_qry_params, connection)
 						.then(function (connection) {
 							if (connection.results.length < 1) {
-								var save_qry = "INSERT INTO \"" + linkingTable + "\"(\"left_id\", \"right_id\", \"rel_type\", \"rel_props\") VALUES($1, $2, $3, $4)";
+								var save_qry = "INSERT INTO \"" + linkingTable + "\"(\"left_id\", \"right_id\", \"rel_name\", \"rel_props\") VALUES($1, $2, $3, $4)";
 								var save_qry_params = [];
-								if (relType === undefined || relType === null || relType.length === 0) {
+								if (relName === undefined || relName === null || relName.length === 0) {
 									save_qry_params = [e1_rowId, e2_rowId, 'default', rel_props];
 								}
 								else {
-									save_qry_params = [e1_rowId, e2_rowId, relType, rel_props];
+									save_qry_params = [e1_rowId, e2_rowId, relName, rel_props];
 								}
 								DataAccess.prototype.ExecutePostgresQuery(save_qry, save_qry_params, connection)
 								.then(function (connection) {
@@ -1566,17 +1770,17 @@ DataAccess.prototype.addRelationship = function (entity1, entity2, relType, conn
 
 }
 
-DataAccess.prototype.t_addRelationship = function (connection, entity1, entity2, relType, rel_props, callback) {
-	return DataAccess.prototype.addRelationship(entity1, entity2, relType, connection, rel_props, callback);
+DataAccess.prototype.t_addRelationship = function (connection, entity1, entity2, relName, rel_props, callback) {
+	return DataAccess.prototype.addRelationship(entity1, entity2, relName, connection, rel_props, callback);
 };
 
 // entity1 -- ONE ENTITY IN THE RELATIONSHIP
 //				REQUIRES AT LEAST 'object_type' AND 'id'
 // entity2 -- THE OTHER ENTITY IN THE RELATIONSHIP
 //				REQUIRES AT LEAST 'object_type' AND 'id'
-// relType -- NAME OR TYPE FOR THIS RELATIONSHIP
+// relName -- NAME OR TYPE FOR THIS RELATIONSHIP
 // THIS DESTROYS THE NAMED RELATIONSHIP BETWEEN THE TWO SPECIFIED ENTITIES
-DataAccess.prototype.removeRelationship = function (entity1, entity2, relType, connection, callback) {
+DataAccess.prototype.removeRelationship = function (entity1, entity2, relName, connection, callback) {
 	var deferred = Q.defer();
 	var e1_rowId = null;
 	var e2_rowId = null;
@@ -1612,8 +1816,8 @@ DataAccess.prototype.removeRelationship = function (entity1, entity2, relType, c
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var entity1Collection = typeToCollectionMap[entity1.object_type];
-		var entity2Collection = typeToCollectionMap[entity2.object_type];
+		var entity1Collection = typeToTableMap[entity1.object_type];
+		var entity2Collection = typeToTableMap[entity2.object_type];
 		if (entity1Collection === null || entity2Collection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -1694,13 +1898,13 @@ DataAccess.prototype.removeRelationship = function (entity1, entity2, relType, c
 						e2_rowId = connection.results[0].row_id;
 
 						// DELETE THE RELATIONSHIP
-						var del_qry = "DELETE FROM \"" + linkingTable + "\" WHERE left_id = $1 AND right_id = $2 AND rel_type = $3";
+						var del_qry = "DELETE FROM \"" + linkingTable + "\" WHERE left_id = $1 AND right_id = $2 AND rel_name = $3";
 						var del_params = [];
-						if (relType === undefined || relType === null || relType.length === 0) {
+						if (relName === undefined || relName === null || relName.length === 0) {
 							del_params = [e1_rowId, e2_rowId, 'default'];
 						}
 						else {
-							del_params = [e1_rowId, e2_rowId, relType];
+							del_params = [e1_rowId, e2_rowId, relName];
 						}
 						DataAccess.prototype.ExecutePostgresQuery(del_qry, del_params, connection)
 						.then(function (connection) {
@@ -1738,8 +1942,8 @@ DataAccess.prototype.removeRelationship = function (entity1, entity2, relType, c
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_removeRelationship = function (connection, entity1, entity2, relType, callback) {
-	return DataAccess.prototype.removeRelationship(entity1, entity2, relType, connection, callback);
+DataAccess.prototype.t_removeRelationship = function (connection, entity1, entity2, relName, callback) {
+	return DataAccess.prototype.removeRelationship(entity1, entity2, relName, connection, callback);
 };
 
 // obj -- AN ENTITY INCLUDING 'id' AND 'object_type'
@@ -1873,15 +2077,15 @@ function t_removeAllRelationships(connection, obj, callback) {
 
 // obj -- AN ENTITY INCLUDING 'id' AND 'object_type'
 // relatedType -- AN 'object_type' VALUE
-// relType -- THE NAME OR TYPE OF A RELATIONSHIP
+// relName -- THE NAME OR TYPE OF A RELATIONSHIP
 // GIVEN AN ENTITY obj, RETURN ALL RELATED ENTITIES WITH 'object_type' = relatedType
-// AND WHERE THE RELATIONSHIP'S relType IS THE SAME AS THE ONE SPECIFIED.  IF
-// relType IS undefined OR null, RETURN ALL RELATED OBJECTS REGARDLESS OF relType
-DataAccess.prototype.join = function (obj, relatedType, relType, connection, callback) {
+// AND WHERE THE RELATIONSHIP'S relName IS THE SAME AS THE ONE SPECIFIED.  IF
+// relName IS undefined OR null, RETURN ALL RELATED OBJECTS REGARDLESS OF relName
+DataAccess.prototype.join = function (obj, relatedType, relName, connection, callback) {
 	var deferred = Q.defer();
 
 	if (obj.id !== null && obj.object_type !== null) {
-		var origCollection = typeToCollectionMap[obj.object_type];
+		var origCollection = typeToTableMap[obj.object_type];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -1897,7 +2101,7 @@ DataAccess.prototype.join = function (obj, relatedType, relType, connection, cal
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -1949,21 +2153,21 @@ DataAccess.prototype.join = function (obj, relatedType, relType, connection, cal
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === null || relType === undefined) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id"
+			if (relName === null || relName === undefined) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id"
 			}
 			else {
-				qry = "SELECT rTable.data as data, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+				qry_params = [relName];
 			}
 		}
 		else {
-			if (relType === null || relType === undefined) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+			if (relName === null || relName === undefined) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
 			}
 			else {
-				qry = "SELECT rTable.data as data, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data, lTable.rel_props as rel_props FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+				qry_params = [relName];
 			}
 		}
 		DataAccess.prototype.ExecutePostgresQuery(qry, qry_params, connection)
@@ -1977,11 +2181,11 @@ DataAccess.prototype.join = function (obj, relatedType, relType, connection, cal
 				else {
 					result.rel_props = null;
 				}
-				if(relType === undefined || relType === null) {
-					result.rel_type = connection.results[rIdx].rel_type;
+				if(relName === undefined || relName === null) {
+					result.rel_name = connection.results[rIdx].rel_name;
 				}
 				else {
-					result.rel_type = relType;
+					result.rel_name = relName;
 				}
 				resolveObjs.push(result);
 			}
@@ -2004,22 +2208,22 @@ DataAccess.prototype.join = function (obj, relatedType, relType, connection, cal
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_join = function (connection, obj, relatedType, relType, callback) {
-	return DataAccess.prototype.join(obj, relatedType, relType, connection);
+DataAccess.prototype.t_join = function (connection, obj, relatedType, relName, callback) {
+	return DataAccess.prototype.join(obj, relatedType, relName, connection);
 };
 
 // obj -- AN ENTITY INCLUDING 'id' AND 'object_type'
 // relatedType -- AN 'object_type' VALUE
-// relType -- THE NAME OR TYPE OF A RELATIONSHIP
+// relName -- THE NAME OR TYPE OF A RELATIONSHIP
 // GIVEN AN ENTITY obj, RETURN ALL RELATED ENTITIES WITH 'object_type' = relatedType
-// AND WHERE THE RELATIONSHIP'S relType IS THE SAME AS THE ONE SPECIFIED.  IF
-// relType IS undefined OR null, RETURN ALL RELATED OBJECTS REGARDLESS OF relType
+// AND WHERE THE RELATIONSHIP'S relName IS THE SAME AS THE ONE SPECIFIED.  IF
+// relName IS undefined OR null, RETURN ALL RELATED OBJECTS REGARDLESS OF relName
 // IF MORE THAN ONE ENTITY OR NO ENTITIES MATCH, RETURN AN ERROR
-DataAccess.prototype.joinOne = function (obj, relatedType, relType, connection, callback) {
+DataAccess.prototype.joinOne = function (obj, relatedType, relName, connection, callback) {
 	var deferred = Q.defer();
 
 	if (obj.id !== null && obj.object_type !== null) {
-		var origCollection = typeToCollectionMap[obj.object_type];
+		var origCollection = typeToTableMap[obj.object_type];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2035,7 +2239,7 @@ DataAccess.prototype.joinOne = function (obj, relatedType, relType, connection, 
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2086,21 +2290,21 @@ DataAccess.prototype.joinOne = function (obj, relatedType, relType, connection, 
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true'";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true'";
 			}
 			else {
-				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true'";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true'";
+				qry_params = [relName];
 			}
 		}
 		else {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true'";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true'";
 			}
 			else {
-				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true'";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true'";
+				qry_params = [relName];
 			}
 		}
 		DataAccess.prototype.ExecutePostgresQuery(qry, qry_params, connection)
@@ -2131,11 +2335,11 @@ DataAccess.prototype.joinOne = function (obj, relatedType, relType, connection, 
 			}
 			else {
 				var result = connection.results[0].data;
-				if(relType === undefined || relType === null) {
-					result.rel_type = connection.results[0].rel_type;
+				if(relName === undefined || relName === null) {
+					result.rel_name = connection.results[0].rel_name;
 				}
 				else {
-					result.rel_type = relType;
+					result.rel_name = relName;
 				}
 				deferred.resolve(result);
 			}
@@ -2161,8 +2365,8 @@ DataAccess.prototype.joinOne = function (obj, relatedType, relType, connection, 
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_joinOne = function (connection, obj, relatedType, relType, callback) {
-	return DataAccess.prototype.joinOne(obj, relatedType, relType, connection);
+DataAccess.prototype.t_joinOne = function (connection, obj, relatedType, relName, callback) {
+	return DataAccess.prototype.joinOne(obj, relatedType, relName, connection);
 };
 
 // objectType -- AN 'object_type' VALUE
@@ -2173,11 +2377,11 @@ DataAccess.prototype.t_joinOne = function (connection, obj, relatedType, relType
 //					RELATED ENTITIES
 // GIVEN A ROOT ENTITY TYPE AND A SET OF PARAMETERS ON WHICH TO MATCH, FIND ALL
 // RELATED ENTITIES OF TYPE relatedType MATCHING THE PARAMETERS IN relatedWhere
-DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType, relatedWhere, relType, connection, callback) {
+DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType, relatedWhere, relName, connection, callback) {
 	var deferred = Q.defer();
 
 	if (objectType !== null || objectWhere !== null || relatedType !== null || relatedWhere !== null) {
-		var origCollection = typeToCollectionMap[objectType];
+		var origCollection = typeToTableMap[objectType];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2193,7 +2397,7 @@ DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType,
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2243,21 +2447,21 @@ DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType,
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
 			}
 			else {
-				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+				qry_params = [relName];
 			}
 		}
 		else {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
 			}
 			else {
-				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.row_id";
+				qry_params = [relName];
 			}
 		}
 
@@ -2266,11 +2470,11 @@ DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType,
 			var resolveObjs = [];
 			for(var rIdx = 0; rIdx < connection.results.length; rIdx++) {
 				var result = connection.results[rIdx].data;
-				if(relType === undefined || relType === null) {
-					result.rel_type = connection.results[rIdx].rel_type;
+				if(relName === undefined || relName === null) {
+					result.rel_name = connection.results[rIdx].rel_name;
 				}
 				else {
-					result.rel_type = relType;
+					result.rel_name = relName;
 				}
 				resolveObjs.push(result);
 			}
@@ -2297,8 +2501,8 @@ DataAccess.prototype.joinWhere = function (objectType, objectWhere, relatedType,
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_joinWhere = function (connection, objectType, objectWhere, relatedType, relatedWhere, relType, callback) {
-	return DataAccess.prototype.joinWhere(objectType, objectWhere, relatedType, relatedWhere, relType, connection);
+DataAccess.prototype.t_joinWhere = function (connection, objectType, objectWhere, relatedType, relatedWhere, relName, callback) {
+	return DataAccess.prototype.joinWhere(objectType, objectWhere, relatedType, relatedWhere, relName, connection);
 };
 
 // objectType -- AN 'object_type' VALUE
@@ -2312,7 +2516,7 @@ DataAccess.prototype.t_joinWhere = function (connection, objectType, objectWhere
 // GIVEN A ROOT ENTITY TYPE AND A SET OF PARAMETERS ON WHICH TO MATCH, FIND ALL
 // RELATED ENTITIES OF TYPE relatedType MATCHING THE PARAMETERS IN relatedWhere
 // ORDER THE RESULTS BASED ON orderField and desc
-DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relatedType, relatedWhere, relType, orderField, desc, connection, callback) {
+DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relatedType, relatedWhere, relName, orderField, desc, connection, callback) {
 	var deferred = Q.defer();
 
 	var direction = 'ASC';
@@ -2321,7 +2525,7 @@ DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relat
 	}
 
 	if (objectType !== null || objectWhere !== null || relatedType !== null || relatedWhere !== null) {
-		var origCollection = typeToCollectionMap[objectType];
+		var origCollection = typeToTableMap[objectType];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2337,7 +2541,7 @@ DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relat
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2387,21 +2591,21 @@ DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relat
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data as \"" + objectType + "\", lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "'  AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data as \"" + objectType + "\", lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "'  AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
 			}
 			else {
-				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data as \"" + objectType + "\", lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
-				qry_params = [relType];
+				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data as \"" + objectType + "\", lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
+				qry_params = [relName];
 			}
 		}
 		else {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data \"" + objectType + "\", lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
+			if (relName === undefined || relName === null) {
+				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data \"" + objectType + "\", lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
 			}
 			else {
-				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data \"" + objectType + "\", lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
-				qry_params = [relType];
+				qry = "SELECT rTable.data as \"" + relatedType + "\", oTable.data \"" + objectType + "\", lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY rTable.data->>'" + orderField + "' " + direction;
+				qry_params = [relName];
 			}
 		}
 		DataAccess.prototype.ExecutePostgresQuery(qry, qry_params, connection)
@@ -2429,20 +2633,20 @@ DataAccess.prototype.joinWhereOrdered = function (objectType, objectWhere, relat
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_joinWhereOrdered = function (connection, objectType, objectWhere, relatedType, relatedWhere, relType, orderField, desc, callback) {
-	return DataAccess.prototype.joinWhereOrdered(objectType, objectWhere, relatedType, relatedWhere, relType, orderField, desc, connection);
+DataAccess.prototype.t_joinWhereOrdered = function (connection, objectType, objectWhere, relatedType, relatedWhere, relName, orderField, desc, callback) {
+	return DataAccess.prototype.joinWhereOrdered(objectType, objectWhere, relatedType, relatedWhere, relName, orderField, desc, connection);
 };
 
 // obj -- THE ROOT ENTITY USED FOR THE JOIN
 // relatedType -- THE 'object_type' VALUE OF THE RELATED ENTITIES
-// relType -- THE NAME OR TYPE OF THE RELATIONSHIPS TO USE WHEN FINDING
+// relName -- THE NAME OR TYPE OF THE RELATIONSHIPS TO USE WHEN FINDING
 //				RELATED ENTITIES
 // dateField -- THE FIELD IN THE RELATED ENTITIES TO USE FOR DATE FILTERING
 // startDate -- RETURN ONLY RELATED ENTITIES WITH dateField AFTER THIS DATE
 // endDate -- RETURN ONLY RELATED ENTITIES WITH dateField BEFORE THIS DATE
 // startDate OR endDate MAY BE null, BUT NOT BOTH
 // DATES MUST BE ISO FORMAT YYYY-MM-DDTHH:mm:ss.uuuZ TO DESIRED PRECISION
-DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dateField, startDate, endDate, connection, callback) {
+DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relName, dateField, startDate, endDate, connection, callback) {
 	var deferred = Q.defer();
 
 	if (startDate === undefined) {
@@ -2468,7 +2672,7 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dat
 	}
 
 	if (obj.id !== null && obj.object_type !== null) {
-		var origCollection = typeToCollectionMap[obj.object_type];
+		var origCollection = typeToTableMap[obj.object_type];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2484,7 +2688,7 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dat
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2536,52 +2740,52 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dat
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === null || relType === undefined) {
+			if (relName === null || relName === undefined) {
 				if (startDate !== null && endDate !== null) {
-					qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else if (endDate === null) {
-					qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else {
-					qry = "SELECT rTable.data as data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 			}
 			else {
-				qry_params = [relType];
+				qry_params = [relName];
 				if (startDate !== null && endDate !== null) {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else if (endDate === null) {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 			}
 		}
 		else {
-			if (relType === null || relType === undefined) {
+			if (relName === null || relName === undefined) {
 				if (startDate !== null && endDate !== null) {
-					qry = "SELECT rTable.data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else if (endDate === null) {
-					qry = "SELECT rTable.data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else {
-					qry = "SELECT rTable.data, lTable.rel_type as rel_type FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 			}
 			else {
-				qry_params = [relType];
+				qry_params = [relName];
 				if (startDate !== null && endDate !== null) {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else if (endDate === null) {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') > to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 				else {
-					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
+					qry = "SELECT rTable.data as data FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') < to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
 			}
 		}
@@ -2591,11 +2795,11 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dat
 			var resolveObjs = [];
 			for(var rIdx = 0; rIdx < connection.results.length; rIdx++) {
 				var result = connection.results[rIdx].data;
-				if(relType === undefined || relType === null) {
-					result.rel_type = connection.results[rIdx].rel_type;
+				if(relName === undefined || relName === null) {
+					result.rel_name = connection.results[rIdx].rel_name;
 				}
 				else {
-					result.rel_type = relType;
+					result.rel_name = relName;
 				}
 				resolveObjs.push(result);
 			}
@@ -2622,8 +2826,8 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relType, dat
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_joinBetweenDates = function (connection, obj, relatedType, relType, dateField, startDate, endDate, callback) {
-	return DataAccess.prototype.joinBetweenDates(obj, relatedType, relType, dateField, startDate, endDate, connection);
+DataAccess.prototype.t_joinBetweenDates = function (connection, obj, relatedType, relName, dateField, startDate, endDate, callback) {
+	return DataAccess.prototype.joinBetweenDates(obj, relatedType, relName, dateField, startDate, endDate, connection);
 };
 
 // objectType -- AN 'object_type' VALUE
@@ -2635,11 +2839,11 @@ DataAccess.prototype.t_joinBetweenDates = function (connection, obj, relatedType
 // GIVEN A ROOT ENTITY TYPE AND A SET OF PARAMETERS ON WHICH TO MATCH, FIND ALL
 // RELATED ENTITIES OF TYPE relatedType MATCHING THE PARAMETERS IN relatedWhere
 // AND PACK THEM INTO THE ROOT ENTITY TO RETURN RESOLVED ENTITIES
-DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, relatedType, relatedWhere, relType, connection, callback) {
+DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, relatedType, relatedWhere, relName, connection, callback) {
 	var deferred = Q.defer();
 
 	if (objectType !== null || objectWhere !== null || relatedType !== null || relatedWhere !== null) {
-		var origCollection = typeToCollectionMap[objectType];
+		var origCollection = typeToTableMap[objectType];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2655,7 +2859,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedType];
+		var relatedCollection = typeToTableMap[relatedType];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -2725,7 +2929,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 			loop1:
 			for (var mIdx = 0; mIdx < models.length; mIdx++) {
 				// CHECK THE MODEL FOR objectType
-				if (models[mIdx].obj_type === objectType) {
+				if (models[mIdx].object_type === objectType) {
 					for (var rIdx = 0; rIdx < models[mIdx].relationships.length; rIdx++) {
 						if (models[mIdx].relationships[rIdx].relates_to === relatedType) {
 							propName = models[mIdx].relationships[rIdx].plural_name;
@@ -2736,7 +2940,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 
 				// RELATIONSHIPS ONLY HAVE DESCRIPTORS IN A SINGLE DIRECTION
 				// SO CHECK THE RELATED TYPE TOO
-				if (models[mIdx].obj_type === relatedType) {
+				if (models[mIdx].object_type === relatedType) {
 					for (var rIdx = 0; rIdx < models[mIdx].relationships.length; rIdx++) {
 						if (models[mIdx].relationships[rIdx].relates_to === objectType) {
 							propName = models[mIdx].relationship[rIdx].plural_rev;
@@ -2765,21 +2969,21 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_type as \"relType\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_name as \"relName\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
 			}
 			else {
-				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_type as \"relType\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_name as \"relName\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
+				qry_params = [relName];
 			}
 		}
 		else {
-			if (relType === undefined || relType === null) {
-				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_type as \"relType\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
+			if (relName === undefined || relName === null) {
+				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_name as \"relName\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
 			}
 			else {
-				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_type as \"relType\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_type = $1 AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
-				qry_params = [relType];
+				qry = "SELECT oTable.data as \"rootObj\", rTable.data as \"relObj\", lTable.rel_name as \"relName\" FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.right_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.left_id = rTable.row_id WHERE oTable.data @> '" + JSON.stringify(objectWhere) + "' AND rTable.data @> '" + JSON.stringify(relatedWhere) + "' AND lTable.rel_name = $1 AND rTable.data->'is_active' = 'true' ORDER BY oTable.row_id";
+				qry_params = [relName];
 			}
 		}
 
@@ -2793,7 +2997,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 				for (var oIdx = 0; oIdx < returnObjs.length; oIdx++) {
 					var obj = returnObjs[oIdx];
 					if (obj.id === row.rootObj.id) {
-						var rt = row.relType;
+						var rt = row.relName;
 						if (rt === undefined || rt === null) {
 							rt = 'default';
 						}
@@ -2816,7 +3020,7 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 				}
 				if (!foundObj) {
 					var newObj = row.rootObj;
-					var rt = row.relType;
+					var rt = row.relName;
 					if (rt === undefined || rt === null) {
 						rt = 'default';
 					}
@@ -2848,8 +3052,8 @@ DataAccess.prototype.joinWhereAndResolve = function (objectType, objectWhere, re
 	return deferred.promise;
 };
 
-DataAccess.prototype.t_joinWhereAndResolve = function (connection, objectType, objectWhere, relatedType, relatedWhere, relType, callback) {
-	return DataAccess.prototype.joinWhereAndResolve(objectType, objectWhere, relatedType, relatedWhere, relType, connection);
+DataAccess.prototype.t_joinWhereAndResolve = function (connection, objectType, objectWhere, relatedType, relatedWhere, relName, callback) {
+	return DataAccess.prototype.joinWhereAndResolve(objectType, objectWhere, relatedType, relatedWhere, relName, connection);
 };
 // ================================================================================
 
@@ -3173,12 +3377,12 @@ DataAccess.prototype.ExecuteParameterizedQuery = function (parameterizedQuery, p
 //EXAMPLE OF QUERY OBJECT:
 // var query_object = {
 //     "resolve_relationships": true,
-//     "obj_type": "person",
+//     "object_type": "person",
 //     "parameters": [],
 //     "relates_to": [
 //          {
-//              "obj_type": service_record,
-//              "rel_type": "",
+//              "object_type": service_record,
+//              "rel_name": "",
 //              "parameters": [["and","service_description","oil","partial"]
 //          }
 //     ],
@@ -3222,35 +3426,35 @@ DataAccess.prototype.t_BackstrapQuery = function (connection, queryObject, model
 
 	try {
 		var isUserObj = false;
-		if (queryObject.obj_type === 'bsuser') {
+		if (queryObject.object_type === 'bsuser') {
 			isUserObj = true;
 		}
 
-		qrySelect = "SELECT " + queryObject.obj_type + ".data FROM " + queryObject.obj_type;
+		qrySelect = "SELECT " + queryObject.object_type + ".data FROM " + queryObject.object_type;
 		var qryJoins = "";
 		var whereAppend = "";
 		if (!isUserObj) {
 			models.data.models.forEach(function (m) {
-				if (m.obj_type === queryObject.obj_type) {
+				if (m.object_type === queryObject.object_type) {
 					queryObject.relates_to.forEach(function (relTo) {
-						var parentJoinKey = m.obj_type + '.row_id';
+						var parentJoinKey = m.object_type + '.row_id';
 						var ixLink = 0;
 						m.relationships.forEach(function (r) {
-							if (relTo.obj_type === r.relates_to) {
+							if (relTo.object_type === r.relates_to) {
 								//JOIN LINKING TABLE
 								ixLink++;
 								var ltAlias = "lt" + ixLink;
 								var ltJoinLeft = ltAlias + ".left_id";
 								var ltJoinRight = ltAlias + ".right_id";
 								qryJoins += " INNER JOIN " + r.linking_table + " " + ltAlias + " ON " + parentJoinKey + "=" + ltJoinLeft;
-								//IF there is a rel_type, we need to add that to the where statement
-								if (relTo.lookup_rel_type !== undefined && relTo.lookup_rel_type !== null && relTo.lookup_rel_type.length > 0) {
-									whereAppend += " AND LOWER(" + ltAlias + ".rel_type) = '" + relTo.lookup_rel_type.toLowerCase() + "'";
+								//IF there is a rel_name, we need to add that to the where statement
+								if (relTo.lookup_rel_name !== undefined && relTo.lookup_rel_name !== null && relTo.lookup_rel_name.length > 0) {
+									whereAppend += " AND LOWER(" + ltAlias + ".rel_name) = '" + relTo.lookup_rel_name.toLowerCase() + "'";
 								}
 								//THEN LINKED ENTITY TABLE
 								var rtAlias = "rt" + ixLink;
 								var rtJoinField = rtAlias + ".row_id";
-								if (relTo.obj_type === 'bsuser') {
+								if (relTo.object_type === 'bsuser') {
 									qryJoins += " INNER JOIN bsuser " + rtAlias + " ON " + ltJoinRight + "=" + rtJoinField;
 								}
 								else {
@@ -3265,17 +3469,17 @@ DataAccess.prototype.t_BackstrapQuery = function (connection, queryObject, model
 						});
 					});
 					//only active records
-					qrySelect += qryJoins += " WHERE " + m.obj_type + ".data->'is_active' = 'true'";
+					qrySelect += qryJoins += " WHERE " + m.object_type + ".data->'is_active' = 'true'";
 
 					// IF THE USER DOESN'T SPECIFY, WE ONLY WANT ACTIVE RECORDS FOR MAIN OBJECT
 					if (isActive === undefined || isActive === null || isActive === true) {
-						qrySelect += " AND " + queryObject.obj_type + ".data->'is_active' = 'true'";
+						qrySelect += " AND " + queryObject.object_type + ".data->'is_active' = 'true'";
 					}
 
 					//add where clause for any parent obj properties in query
 					queryObject.parameters.forEach(function (p) {
 						//use the ILIKE for case insensitive, but require whole word match
-						qrySelect += " AND (" + m.obj_type + ".data #>> '{" + p.property + "}' ILIKE '" + p.value + "')";
+						qrySelect += " AND (" + m.object_type + ".data #>> '{" + p.property + "}' ILIKE '" + p.value + "')";
 					});
 					qrySelect += whereAppend;
 				}
@@ -3413,7 +3617,7 @@ DataAccess.prototype.DeleteAllById = function (table, row_ids, callback) {
 DataAccess.prototype.AddRelationshipUsingRowIds = function (linkingTable, left_id, right_id, relTyp, callback) {
 	var deferred = Q.defer();
 
-	var qry = "INSERT INTO \"" + linkingTable + "\"(\"left_id\", \"right_id\", \"rel_type\") VALUES(" + left_id + "," + right_id + ",'" + relTyp + "')";
+	var qry = "INSERT INTO \"" + linkingTable + "\"(\"left_id\", \"right_id\", \"rel_name\") VALUES(" + left_id + "," + right_id + ",'" + relTyp + "')";
 	var qry_params = [];
 	DataAccess.prototype.ExecutePostgresQuery(qry, qry_params, null)
 	.then(function (connection) {
@@ -3428,29 +3632,29 @@ DataAccess.prototype.AddRelationshipUsingRowIds = function (linkingTable, left_i
 };
 
 /**
- * updates the reltype and/or rel props of the given relationship directly
+ * updates the relName and/or rel props of the given relationship directly
  * @param {String} linking_table_name linking table that contains relationship
  * @param {Number} relationship_row_id row id of the relationship to be updated
  * @param {*} rel_props optional relationship properties to write (full write over old rel_props)
- * @param {String} rel_type optional relationship type identifier/label to update
+ * @param {String} rel_name optional relationship type identifier/label to update
  * @param {connection} connection optional db connection, can be null 
  * @param {*} callback 
  * 
  * @returns postgres results of query execution
  */
-DataAccessExtension.prototype.updateRelationship = function(linkingTable, relationship_row_id, rel_props, rel_type, connection, callback) {
+DataAccessExtension.prototype.updateRelationship = function(linkingTable, relationship_row_id, rel_props, rel_name, connection, callback) {
 	var deferred = Q.defer();
 
 	var query_params = [];
 	var update_query = "UPDATE "+ linking_table_name;
-	if (typeof(rel_props) !== 'undefined' && typeof(rel_type) !== 'undefined'){
-		update_query += " SET rel_type = '"+ rel_type +"', rel_props = $1";
+	if (typeof(rel_props) !== 'undefined' && typeof(rel_name) !== 'undefined'){
+		update_query += " SET rel_name = '"+ rel_name +"', rel_props = $1";
 		query_params.push(rel_props);
 	}
-	else if(typeof(rel_props) == 'undefined' && typeof(rel_type) !== 'undefined') {
-		update_query += " SET rel_type = '"+ rel_type +"'";
+	else if(typeof(rel_props) == 'undefined' && typeof(rel_name) !== 'undefined') {
+		update_query += " SET rel_name = '"+ rel_name +"'";
 	}
-	else if (typeof(rel_props) !== 'undefined' && typeof(rel_type) == 'undefined') {
+	else if (typeof(rel_props) !== 'undefined' && typeof(rel_name) == 'undefined') {
 		update_query += " SET rel_props = $1";
 		query_params.push(rel_props);
 	}
@@ -3556,11 +3760,11 @@ DataAccess.prototype.findUser = function (email, username, connection, callback)
 
 
 // UPDATE THE rel_props OF A RELATIONSHIP USING SIMILAR SYNTAX TO dataAccess.join
-DataAccess.prototype.updateRelProps = function (obj, relatedObj, relType, relProps, connection, callback) {
+DataAccess.prototype.updateRelProps = function (obj, relatedObj, relName, relProps, connection, callback) {
 	var deferred = Q.defer();
 
 	if (obj.id !== null && obj.object_type !== null) {
-		var origCollection = typeToCollectionMap[obj.object_type];
+		var origCollection = typeToTableMap[obj.object_type];
 		if (origCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -3576,7 +3780,7 @@ DataAccess.prototype.updateRelProps = function (obj, relatedObj, relType, relPro
 			deferred.promise.nodeify(callback);
 			return deferred.promise;
 		}
-		var relatedCollection = typeToCollectionMap[relatedObj.object_type];
+		var relatedCollection = typeToTableMap[relatedObj.object_type];
 		if (relatedCollection === null) {
 			releaseConnection(connection)
 			.then(function() {
@@ -3628,23 +3832,23 @@ DataAccess.prototype.updateRelProps = function (obj, relatedObj, relType, relPro
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relType === null || relType === undefined) {
+			if (relName === null || relName === undefined) {
 				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.left_id AND rTable.row_id = lTable.right_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}'";
 				qry_params = [relProps];
 			}
 			else {
-				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.left_id AND rTable.row_id = lTable.right_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}' AND lTable.rel_type = $2";
-				qry_params = [relProps, relType];
+				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.left_id AND rTable.row_id = lTable.right_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}' AND lTable.rel_name = $2";
+				qry_params = [relProps, relName];
 			}
 		}
 		else {
-			if (relType === null || relType === undefined) {
+			if (relName === null || relName === undefined) {
 				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.right_id AND rTable.row_id = lTable.left_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}'";
 				qry_params = [relProps];
 			}
 			else {
-				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.right_id AND rTable.row_id = lTable.left_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}' AND lTable.rel_type = $2";
-				qry_params = [relProps, relType];
+				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.right_id AND rTable.row_id = lTable.left_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}' AND lTable.rel_name = $2";
+				qry_params = [relProps, relName];
 			}
 		}
 		DataAccess.prototype.ExecutePostgresQuery(qry, qry_params, connection)
@@ -3658,11 +3862,11 @@ DataAccess.prototype.updateRelProps = function (obj, relatedObj, relType, relPro
 				else {
 					result.rel_props = null;
 				}
-				if(relType === undefined || relType === null) {
-					result.rel_type = connection.results[rIdx].rel_type;
+				if(relName === undefined || relName === null) {
+					result.rel_name = connection.results[rIdx].rel_name;
 				}
 				else {
-					result.rel_type = relType;
+					result.rel_name = relName;
 				}
 				resolveObjs.push(result);
 			}

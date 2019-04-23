@@ -7,20 +7,20 @@ dashboard.controller("ModelController", ['$scope','$state', '$animate', '$elemen
             doSave:false,           
         }, 500); // close, but give 500ms for bootstrap to animate      
     }
-    $scope.obj_type = '';
+    $scope.object_type = '';
     $scope.description = '';
     $scope.showMessage = false;
     $scope.doSave = false;
     $scope.message = 'All fields are required.';
     $scope.save = function(){
         var message = "";
-        if ($scope.description === '' || $scope.obj_type === ''){
+        if ($scope.description === '' || $scope.object_type === ''){
             $scope.showMessage = true;
         }
         else{
             var today = new Date().toISOString().slice(0, 10);
             var objModel = {
-                obj_type: $scope.obj_type,
+                object_type: $scope.object_type,
                 description: $scope.description,
                 date_created: today,
                 date_updated: today,
@@ -43,23 +43,23 @@ dashboard.controller("ModelController", ['$scope','$state', '$animate', '$elemen
             var allModels = backstrap_service.getLocalModels();
             var okayToSave = true;  
             allModels.forEach(function(m){
-                if (m.obj_type.toLowerCase() === $scope.obj_type.toLowerCase()){
+                if (m.object_type.toLowerCase() === $scope.object_type.toLowerCase()){
                     okayToSave = false;
                     message = "This object already exists. Please rename your entity and try again.";
                 }
             });  
-            var modelName = $scope.obj_type.toLowerCase().trim();
+            var modelName = $scope.object_type.toLowerCase().trim();
             if (modelName === "bsuser" || modelName === "bsuser_analytics" || modelName === "bsuser_session" ||
                 modelName === "analytics" || modelName === "internal_system" || modelName === "logged_event"|| modelName === "session" || modelName === "uid"){   
                 okayToSave = false;             
-                    message = "Sorry, " + $scope.obj_type + " is reserved for internal use.";
-                    $scope.obj_type = "";
+                    message = "Sorry, " + $scope.object_type + " is reserved for internal use.";
+                    $scope.object_type = "";
             }
             if (okayToSave){ 
                 if (objModel.roles === undefined || objModel.roles === null){
                     objModel['roles'] = ['super-user'];
                 }
-                objModel.obj_type = objModel.obj_type.trim();               
+                objModel.object_type = objModel.object_type.trim();               
                 allModels.push(objModel);  
                 var elBackDrop = angular.element(document.querySelector('.modal-backdrop'));  
                 var elModal = angular.element(document.querySelector('.modal'));  
@@ -80,13 +80,13 @@ dashboard.controller("ModelController", ['$scope','$state', '$animate', '$elemen
     }
 
     $scope.validateName = function(){
-        $scope.obj_type = $scope.obj_type.replace(/[^a-zA-Z]/g,'_').trim().toLowerCase();
-        var modelName = $scope.obj_type.toLowerCase().trim();
+        $scope.object_type = $scope.object_type.replace(/[^a-zA-Z]/g,'_').trim().toLowerCase();
+        var modelName = $scope.object_type.toLowerCase().trim();
             if (modelName === "bsuser" || modelName === "bsuser_analytics" || modelName === "bsuser_session" ||
                 modelName === "analytics" || modelName === "internal_system" || modelName === "session" || modelName === "uid"){   
                 okayToSave = false;             
-                $scope.message = "Sorry, " + $scope.obj_type + " is reserved for internal use.";
-                $scope.obj_type = "";
+                $scope.message = "Sorry, " + $scope.object_type + " is reserved for internal use.";
+                $scope.object_type = "";
                 $scope.showMessage = true;
             }
     }

@@ -83,14 +83,14 @@ Controller.prototype.resolveServiceCall = function (serviceCallDescriptor, req, 
 	if (serviceCallDescriptor.area.toLowerCase() === 'common' && serviceCallDescriptor.controller.toLowerCase() === 'models') {
 		for (var mIdx = 0; mIdx < models.data.models.length; mIdx++) {
 			var currentModel = models.data.models[mIdx];
-			if (currentModel.obj_type.toLowerCase() === serviceCallDescriptor.call.toLowerCase()) {
+			if (currentModel.object_type.toLowerCase() === serviceCallDescriptor.call.toLowerCase()) {
 				foundFuncName = true;
 				funcName = 'model';
 				if (serviceCallDescriptor.verb.toLowerCase() === 'get') {
-					req.query.model_type = currentModel.obj_type.toLowerCase();
+					req.query.model_type = currentModel.object_type.toLowerCase();
 				}
 				else {
-					req.body.model_type = currentModel.obj_type.toLowerCase();
+					req.body.model_type = currentModel.object_type.toLowerCase();
 				}
 
 				break;

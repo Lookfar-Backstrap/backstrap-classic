@@ -17,8 +17,8 @@ dashboard.controller("RoleModelController", ['$scope', '$animate', '$element', '
       $scope.querySearch = function() {
             $scope.results = [];
             $scope.models.forEach(function(m){                 
-                if (m.obj_type !== undefined){                         
-                    if (m.obj_type.indexOf($scope.selectedModelText) > -1){
+                if (m.object_type !== undefined){                         
+                    if (m.object_type.indexOf($scope.selectedModelText) > -1){
                         if (m.roles !== undefined && m.roles !== null && m.roles.length > 0){
                             if (m.roles.indexOf($scope.role.name) === -1){
                                 $scope.results.push(m);  
@@ -30,7 +30,7 @@ dashboard.controller("RoleModelController", ['$scope', '$animate', '$element', '
         };
 
         $scope.selectedItemChange = function(item) {          
-            $scope.selectedModelText = item.obj_type;     
+            $scope.selectedModelText = item.object_type;     
             $scope.results = [];
         };
 
@@ -49,7 +49,7 @@ dashboard.controller("RoleModelController", ['$scope', '$animate', '$element', '
             }
             else{
                 $scope.models.forEach(function(m){
-                    if (m.obj_type === $scope.selectedModelText){
+                    if (m.object_type === $scope.selectedModelText){
                         m.roles.push($scope.role.name);
                         model = m;
                     }
@@ -71,7 +71,7 @@ dashboard.controller("RoleModelController", ['$scope', '$animate', '$element', '
             var ixRoleToRemove = 0;
             var model = {};
             $scope.models.forEach(function(m){              
-               if (m.obj_type === $scope.selectedModelText){     
+               if (m.object_type === $scope.selectedModelText){     
                    m.roles.forEach(function(r){
                        ixRole++;
                        if (r.name === $scope.role.name){

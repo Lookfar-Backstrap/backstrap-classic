@@ -35,7 +35,7 @@ dashboard.controller("AddRelationshipToModelController", ['$scope', '$rootScope'
                 modelsWithUser[idx] = allModels[idx];
             }
             modelsWithUser.push({
-                'obj_type': 'bsuser',
+                'object_type': 'bsuser',
                 'description': 'This is a user entity',
                 'relationships': [],
                 'properties': [{
@@ -76,7 +76,7 @@ dashboard.controller("AddRelationshipToModelController", ['$scope', '$rootScope'
                 }]
             });
             modelsWithUser.forEach(function(m){           
-               if (m.obj_type === obj.object_type){
+               if (m.object_type === obj.object_type){
                     m.properties.forEach(function(p){ 
                     table.headers.push(p.name);
                     });      

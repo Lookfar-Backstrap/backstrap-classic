@@ -184,7 +184,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
                 modelsWithUser[idx] = vm.allModels[idx];
             }
             modelsWithUser.push({
-                'obj_type': 'bsuser',
+                'object_type': 'bsuser',
                 'description': 'This is a person entity',
                 'relationships': [],
                 'properties': [{
@@ -225,7 +225,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
                 }]
             });           
             modelsWithUser.forEach(function(r){
-                if (r.obj_type === $scope.data.relGroup){  
+                if (r.object_type === $scope.data.relGroup){  
                     var query = searchRelationQuery();
                     backstrap_service.postBackstrapQuery(query)
                     .then(function(queryItems){
@@ -277,7 +277,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
             query += "{" +
             "\"query_object\": {" + 
                 "\"resolve\": []," +
-                "\"obj_type\": \"" + $scope.data.relGroup +  "\"," + 
+                "\"object_type\": \"" + $scope.data.relGroup +  "\"," + 
                 "\"parameters\": [],"+
                 "\"relates_to\": []," + 
                 "\"offset\": " + "\"0\"" + "," + 
@@ -364,7 +364,7 @@ $scope.addRelationshipModal = function(rel){
                 });
                 if (doSave){
                     updateEntityObj['id'] = vm.selectedEntity.id;
-                    updateEntityObj['object_type'] = vm.model.obj_type;
+                    updateEntityObj['object_type'] = vm.model.object_type;
                     console.log(updateEntityObj);
                     //find the new                        
                     $scope.selectedRelationshipProperties.forEach(function(r){                  
@@ -449,7 +449,7 @@ $scope.addRelationshipModal = function(rel){
 
         $scope.showHint = function(propName){
             var propObj = {
-                 obj_type: vm.model.obj_type,
+                 object_type: vm.model.object_type,
                  property: propName,
                  hint: ''
                 }
