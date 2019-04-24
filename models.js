@@ -22,7 +22,7 @@ Models.prototype.init = function(b, f, rs) {
 	bucket = b;
 	file = f;
 	remoteSettings = rs;
-	if(utilities.isNullOrUndefined(remoteSettings) || remoteSettings === false) {
+	if(remoteSettings == null || remoteSettings === false) {
 		try {
 			if(file.substring(0,2) !== './') file = './'+file;
       var f = require(file);
@@ -106,7 +106,7 @@ Models.prototype.reload = function() {
 
 Models.prototype.save = function(doNetworkReload) {
 	var deferred = Q.defer();
-	if(utilities.isNullOrUndefined(remoteSettings) || remoteSettings === false) {
+	if(remoteSettings == null || remoteSettings === false) {
 		var fswrite = Q.denodeify(fs.writeFile);
 		fswrite(file, JSON.stringify(this.constructor.prototype.data, null, 4))
 		.then(function(write_res) {
