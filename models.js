@@ -5,15 +5,13 @@ var s3;
 var bucket = null;
 var file = null;
 var remoteSettings = null;
-var settings
-var utilities;
+var settings;
 
 var systemModels = require('./SystemModels');
 
-var Models = function(s, u) {
+var Models = function(s) {
 	s3 = new AWS.S3();
 	settings = s;
-	utilities = u;
 };
 
 Models.prototype.init = function(b, f, rs) {

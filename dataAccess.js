@@ -215,7 +215,7 @@ DataAccess.prototype.getDbConnection = function (callback) {
 // CLOSE A CONNECTION TO THE DATABASE AFTER USING FUNCTIONS
 DataAccess.prototype.closeDbConnection = function (connection, callback) {
 	var deferred = Q.defer();
-	if(!connection != null && !connection.isReleased) {
+	if(connection != null && !connection.isReleased) {
 		try {
       connection.release();
       connection.isReleased = true;
