@@ -104,7 +104,7 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		mainController = new Controller(dataAccess, utilities, accessControl, serviceRegistration, settings, models);
 		console.log('Controller initialized');
 		// GENERATE ENDPOINTS FROM MODELS
-		return endpoints.generateFromModels(models.data.models, false);
+		return endpoints.generateFromModels(models.data.models.filter(m => m.system_created !== true), false);
 	})
 	.then(function (ge_res) {
 		console.log('Models generated');
