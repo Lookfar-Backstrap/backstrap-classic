@@ -42,7 +42,7 @@ app.use(cors());
 // process.on('unhandledRejection', r => console.log(r));   // USEFUL IN DEBUGGING
 
 
-//Settings File, contains DB params
+//Config File, contains DB params
 var nodeEnv = process.env.NODE_ENV || 'local';
 var configFile = './config/config.' + nodeEnv + '.js';
 var config = require(configFile);
@@ -77,13 +77,13 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		console.log('Settings initialized');
 		utilities = new Utilities(settings);
 		console.log('Utilities initialized');
-		models = new Models(settings, utilities);
+		models = new Models(settings);
 		return models.init(config.s3.bucket, 'Models.json', useRemoteSettings);
 	})
 	.then(function (endpoints_res) {
 		console.log('Models initialized');
-		endpoints = new Endpoints(settings, utilities);
-		return endpoints.init(config.s3.bucket, 'Endpoints.json', useRemoteSettings, utilities);
+		endpoints = new Endpoints(settings);
+		return endpoints.init(config.s3.bucket, 'Endpoints.json', useRemoteSettings);
 	})
 	.then(function (model_res) {
 		console.log('Endpoints initialized');
@@ -102,7 +102,7 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		mainController = new Controller(dataAccess, utilities, accessControl, serviceRegistration, settings, models);
 		console.log('Controller initialized');
 		// GENERATE ENDPOINTS FROM MODELS
-		return endpoints.generateFromModels(models.data.models, false);
+		return endpoints.generateFromModels(models.data.models.filter(m => m.system_created !== true), false);
 	})
 	.then(function (ge_res) {
 		console.log('Models generated');
@@ -137,14 +137,22 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
       years_registered: [2013, 2014, 2015, 2016, 2017, 2018, 2019],
       bsuser: 'db2011e0dd7251eeb523b47bae6572ea'
     }
-    dataAccess.createEntity(carObj, carObj.bsuser, null, null, ['a'], null)
+    // dataAccess.createEntity(carObj, carObj.bsuser, null, null, ['a'], null)
+    // .then((res) => {
+    //   //console.log(res);
+    //   let obj = {id: res.id, object_type: 'car'};
+    //   return dataAccess.getEntity(obj,{id:'db2011e0dd7251eeb523b47bae6572ea', groups:['a']});
+    // })
+    // .then((get_res) => {
+    //   console.log(get_res);
+    // })
+    // .fail((err) => {
+    //   console.log(err);
+    // });
+
+    dataAccess.updateEntity({id:'e45381bfa55e85951f578073e636d7de', object_type:'car', color:'white', model:'6', years_registered:[2017,2018,2019]})
     .then((res) => {
-      //console.log(res);
-      let obj = {id: res.id, object_type: 'car'};
-      return dataAccess.getEntity(obj,{id:'db2011e0dd7251eeb523b47bae6572ea', groups:['a']});
-    })
-    .then((get_res) => {
-      console.log(get_res);
+      console.log(res);
     })
     .fail((err) => {
       console.log(err);

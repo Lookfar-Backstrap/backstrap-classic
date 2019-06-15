@@ -215,7 +215,7 @@ DataAccess.prototype.getDbConnection = function (callback) {
 // CLOSE A CONNECTION TO THE DATABASE AFTER USING FUNCTIONS
 DataAccess.prototype.closeDbConnection = function (connection, callback) {
 	var deferred = Q.defer();
-	if(!utilities.isNullOrUndefined(connection) && !connection.isReleased) {
+	if(connection != null && !connection.isReleased) {
 		try {
       connection.release();
       connection.isReleased = true;
@@ -313,12 +313,12 @@ DataAccess.prototype.commitTransaction = function (connection, callback) {
 DataAccess.prototype.rollbackTransaction = function (connection, callback) {
 	var deferred = Q.defer();
 
-	if(!utilities.isNullOrUndefined(connection) && !connection.isReleased) {
+	if(connection != null && !connection.isReleased) {
 		if(connection.transactional) {
 			connection.client.query('ROLLBACK', (err) => {
 				if (err) {
 
-					if(!utilities.isNullOrUndefined(connection)) {
+					if(connection != null) {
             connection.release();
             connection.isReleased = true;
 					}
@@ -370,7 +370,7 @@ DataAccess.prototype.rollbackTransaction = function (connection, callback) {
 function resolveDbConnection(connection, callback) {
 	var deferred = Q.defer();
 	
-	if(utilities.isNullOrUndefined(connection)) {
+	if(connection == null) {
 		DataAccess.prototype.getDbConnection()
 		.then(function(db_connection) {
 			deferred.resolve(db_connection);
@@ -399,7 +399,7 @@ function resolveDbConnection(connection, callback) {
 function releaseConnection(connection) {
 	var deferred = Q.defer();
 
-	if(!utilities.isNullOrUndefined(connection) && !connection.isReleased) {
+	if(connection != null && !connection.isReleased) {
 		if(connection.transactional) {
 			DataAccess.prototype.rollbackTransaction(connection)
 			.then(function(rollback_res) {
@@ -433,7 +433,7 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 	var deferred = Q.defer();
 	var pg_query = query;
 	//THE QUERY CONFIG OBJECT DOES NOT WORK IF THERE IS AN EMPTY ARRAY OF PARAMS
-	if (!utilities.isNullOrUndefined(params) && params.length > 0) {
+	if (params != null && params.length > 0) {
 		pg_query = {
 			text: query,
 			values: params,
@@ -505,7 +505,7 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 			// IF THE ARG connection PASSED INTO THE FUNCTION IS null/undefined
 			// THIS IS A ONE-OFF AND WE MUST SHUT DOWN THE CONNECTION WE MADE
 			// BEFORE RETURNING THE RESULTS
-			if(connection != null) {
+			if(connection == null) {
 				releaseConnection(db_connection)
 				.then(function() {
 					deferred.resolve(db_connection);
@@ -521,7 +521,7 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 			// IF THE ARG connection PASSED INTO THE FUNCTION IS null/undefined
 			// THIS IS A ONE-OFF AND WE MUST SHUT DOWN THE CONNECTION WE MADE
 			// AND FAIL OUT
-			if(utilities.isNullOrUndefined(connection)) {
+			if(connection == null) {
         db_connection.release();
         db_connection.isReleased = true;
 				var errorObj = new ErrorObj(500,
@@ -773,11 +773,11 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
   var tm = getTableAndModel(obj);
   if(tm === null) {
     var errorObj = new ErrorObj(500,
-                                'da0300',
+                                'da0301',
                                 __filename,
-                                'createEntity',
+                                'getEntity',
                                 'unknown table or model',
-                                'There was a problem saving to the database'
+                                'There was a problem retrieving this entity'
                               );
     deferred.reject(errorObj)
     deferred.promise.nodeify(callback);
@@ -807,7 +807,7 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
       }
       else {
         let errorObj = new ErrorObj(500,
-                                    'da0310',
+                                    'da0302',
                                     __filename,
                                     'getEntity',
                                     'Found multiple entities with this id');
@@ -965,85 +965,153 @@ DataAccess.prototype.t_saveEntity = function (connection, tableName, obj, callba
 // updateObj -- THE ENTITY AS JSON INCLUDING THE 'id' AND KEY/VALUES FOR UPDATE
 // THIS USES THE 'id' PROPERTY OF updateObj TO LOCATE AN ENTITY AND THEN PERFORMS
 // AN IN-PLACE UPDATE OF ANY KEY/VALUES SUPPLIED IN updateObj.
-DataAccess.prototype.updateEntity = function (tableName, updateObj, connection, withisActive, callback) {
-	var deferred = Q.defer();
-	if (updateObj.id === undefined || updateObj.id === null) {
-		releaseConnection(connection)
-		.then(function() {
-			var errorObj = new ErrorObj(500,
-				'da0022',
-				__filename,
-				'updateEntity',
-				'updateObj must include an id'
-			);
-			deferred.reject(errorObj);
-		});
-	}
-	else {
-		var qry = "SELECT * FROM \"" + tableName + "\" WHERE \"data\" @> '{\"id\": \"" + updateObj.id + "\", \"is_active\":true}'"
-		var params = [];
-		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
-		.then(function (connection) {
-			if (connection.results.length === 0) {
-				releaseConnection(connection)
-				.then(function() {
-					var errorObj = new ErrorObj(500,
-						'da0023',
-						__filename,
-						'updateEntity',
-						'no entities found with that id'
-					);
-					deferred.reject(errorObj);
-				});
-			}
-			else if (connection.results.length > 1) {
-				releaseConnection(connection)
-				.then(function() {
-					var errorObj = new ErrorObj(500,
-						'da0024',
-						__filename,
-						'updateEntity',
-						'multiple entities found with that id'
-					);
-					deferred.reject(errorObj);
-				});
-			}
-			else {
-				// FOUND THE OBJECT
-				var dbObj = connection.results[0];
-				var keys = Object.keys(updateObj);
+DataAccess.prototype.updateEntity = function (updateObj, user, connection, callback) {
+  var deferred = Q.defer();
+  
+  if(updateObj.id == null || updateObj.id === '') {
+    var errorObj = new ErrorObj(500,
+          'da0303',
+          __filename,
+          'getEntity',
+          'no id specified in updateObj',
+          'There was a problem retrieving this entity'
+        );
+    deferred.reject(errorObj)
+    deferred.promise.nodeify(callback);
+    return deferred.promise;
+  }
 
-				for (var propIdx = 0; propIdx < keys.length; propIdx++) {
-					var key = keys[propIdx];
-					if (withisActive) {
-						if (immutableKeys.indexOf(key) === -1 || key === 'is_active') {
-							dbObj[key] = updateObj[key];
-						}
-					}
-					else {
-						if (immutableKeys.indexOf(key) === -1) {
-							dbObj[key] = updateObj[key];
-						}
-					}
-				}
+  var tableName = null;
+  var model = null;
+  var tm = getTableAndModel(updateObj);
+  if(tm === null) {
+    var errorObj = new ErrorObj(500,
+                                'da0304',
+                                __filename,
+                                'getEntity',
+                                'unknown table or model',
+                                'There was a problem retrieving this entity'
+                              );
+    deferred.reject(errorObj)
+    deferred.promise.nodeify(callback);
+    return deferred.promise;
+  }
+  else {
+    tableName = tm[0];
+    model = tm[1];
+  }
 
-				dbObj.updated_at = new Date();
+  // RUN THROUGH EACH PROPERTY OF THE updateObj AND SORT THEM
+  // INTO PROPERTIES, OBJ/ARRAY PROPERTIES, NOSQL PROPERTIES, AND TO-ONE RELATIONSHIPS
+  var updateProps = {};
+  var updateObjProps = {};
+  var updateNoSqlProps = {};
+  var toOneRels = {};
+  let args = Object.getOwnPropertyNames(updateObj);
+  args.forEach((arg) => {
+    var foundProp = false;
 
-				var update_qry = "UPDATE \"" + tableName + "\" SET \"data\" = $1 WHERE \"data\" @> '{\"id\": \"" + dbObj.id + "\"}'";
-				var update_params = [dbObj];
-				DataAccess.prototype.ExecutePostgresQuery(update_qry, update_params, connection)
-				.then(function (connection) {
-					deferred.resolve(updateObj);
-				})
-				.fail(function (err) {
-					deferred.reject(err.AddToError(__filename, 'updateEntity'));
-				});
-			}
-		})
-		.fail(function (qry_err) {
-			deferred.reject(qry_err.AddToError(__filename, 'updateEntity'));
-		});
-	}
+    // SEE IF IT MATCHES ANY PROPERTIES OF THE MODEL
+    for(var pIdx = 0; pIdx < model.properties.length; pIdx++) {
+      var prop = model.properties[pIdx];
+      if(arg === prop.name) {
+        if(prop.nosql === true) {
+          updateNoSqlProps[arg] = updateObj[arg];
+        }
+        else {
+          if(prop.data_type === 'object' || prop.data_type === 'array') {
+            updateObjProps[arg] = updateObj[arg];
+          }
+          else {
+            updateProps[arg] = updateObj[arg];
+          }
+        }
+        foundProp = true;
+        break;
+      }
+    }
+
+    // IF WE DIDN'T FIND THE PROPERTY, SEE IF IT MATCHES A 
+    // TO-ONE RELATIONSHIP
+    if(!foundProp) {
+      let rels = model.relationships.filter(r => r.toOne === true);
+      for(var rIdx = 0; rIdx < rels.length; rIdx++) {
+        var rel = rels[rIdx];
+        if(rel.name === arg) {
+          toOneRels[arg] = updateObj[arg];
+          break;
+        }
+      }
+    }
+  });
+
+  var qry = "UPDATE "+tableName+" SET";
+  
+  // HANDLE THE UPDATE PROPERTIES WHICH ARE FULL DB COLUMNS
+  let upKeys = Object.getOwnPropertyNames(updateProps);
+  upKeys.forEach((pk, idx) => {
+    if(idx === 0) {
+      qry += " ";
+    }
+    else {
+      qry += ", ";
+    }
+    qry += pk+" = "+updateProps[pk];
+  });
+
+  // HANDLE THE UPDATE PROPERTIES WHICH ARE JSONB DB COLUMNS
+  let upObjKeys = Object.getOwnPropertyNames(updateObjProps);
+  upObjKeys.forEach((uok, idx) => {
+    if(idx === 0 && updateProps.length === 0) {
+      qry += " ";
+    }
+    else {
+      qry += ", ";
+    }
+    qry += uok+" = '"+JSON.stringify(updateObjProps[uok])+"'";
+  });
+
+  // HANDLE THE UPDATE PROPERTIES WHICH ARE NOSQL
+  let nosqlKeys = Object.getOwnPropertyNames(updateNoSqlProps);
+  nosqlKeys.forEach((nsk, idx) => {
+    if(idx === 0 && updateProps.length === 0 &&
+        updateObjProps.length === 0) {
+      qry += " ";
+    }
+    else {
+      qry += ", ";
+    }
+
+    qry += "data = jsonb_set(data, '{"+nsk+"}', concat("+JSON.stringify(updateNoSqlProps[nsk])+")::JSONB)";
+  });
+
+  // HANDLE THE TO-ONE RELATIONSHIPS
+  let toOneRelKeys = Object.getOwnPropertyNames(toOneRels);
+  toOneRelKeys.forEach((rk, idx) => {
+    if(idx === 0 && updateProps.length === 0 && 
+        updateObjProps.length === 0 && updateNoSqlProps.length === 0) {
+      qry += " ";
+    }
+    else {
+      qry += ", ";
+    }
+
+    qry += rk + " = " + toOneRels[rk];
+  });
+  
+  qry += " WHERE id = '"+updateObj.id+"'";
+
+  console.log(qry);
+
+  var params = [];
+  DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
+  .then(function (connection) {
+    console.log(connection);
+    deferred.resolve();
+  })
+  .fail(function (qry_err) {
+    deferred.reject(qry_err.AddToError(__filename, 'updateEntity'));
+  });
 
 	deferred.promise.nodeify(callback);
 	return deferred.promise;
@@ -1134,7 +1202,7 @@ DataAccess.prototype.hardDeleteEntity = function (tableName, obj, connection, ca
 
 	resolveDbConnection(connection)
 	.then(function (connection) {
-		if (!utilities.isNullOrUndefined(obj.id) && !utilities.isNullOrUndefined(obj.object_type)) {
+		if (obj.id != null && obj.object_type != null) {
 			t_removeAllRelationships(connection, { "id": obj.id, "object_type": obj.object_type })
 			.then(function () {
 				var qry = "DELETE FROM \"" + tableName + "\" WHERE data->>'id'=$1";
@@ -1951,7 +2019,7 @@ DataAccess.prototype.t_removeRelationship = function (connection, entity1, entit
 function removeAllRelationships(obj, connection, callback) {
 	var deferred = Q.defer();
 
-	if (!utilities.isNullOrUndefined(obj.id) && !utilities.isNullOrUndefined(obj.object_type)) {
+	if (obj.id != null && obj.object_type != null) {
 		var col = obj.object_type;
 		var qry = "SELECT row_id FROM \"" + col + "\" WHERE \"data\" @> '{\"id\": \"" + obj.id + "\"}'";
 		var params = [];
@@ -2740,7 +2808,7 @@ DataAccess.prototype.joinBetweenDates = function (obj, relatedType, relName, dat
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relName === null || relName === undefined) {
+			if (relName == null) {
 				if (startDate !== null && endDate !== null) {
 					qry = "SELECT rTable.data as data, lTable.rel_name as rel_name FROM \"" + origCollection + "\" oTable INNER JOIN \"" + linkingTable + "\" lTable ON oTable.row_id = lTable.left_id INNER JOIN \"" + relatedCollection + "\" rTable ON lTable.right_id = rTable.row_id WHERE oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data->'is_active' = 'true' AND to_timestamp(rTable.data->>'" + dateField + "', 'YYYY-MM-DD HH24:MI:SS.MS') BETWEEN to_timestamp('" + startDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') AND to_timestamp('" + endDate + "', 'YYYY-MM-DD HH24:MI:SS.MS') ORDER BY rTable.row_id";
 				}
@@ -3832,7 +3900,7 @@ DataAccess.prototype.updateRelProps = function (obj, relatedObj, relName, relPro
 		var qry;
 		var qry_params = [];
 		if (!typesAreReversed) {
-			if (relName === null || relName === undefined) {
+			if (relName == null) {
 				qry = "UPDATE "+linkingTable+" lTable SET rel_props = $1 FROM "+origCollection+" oTable, "+relatedCollection+" rTable WHERE oTable.row_id = lTable.left_id AND rTable.row_id = lTable.right_id AND oTable.data @> '{\"id\": \"" + obj.id + "\"}' AND rTable.data @> '{\"id\": \"" + relatedObj.id + "\", \"is_active\": true}'";
 				qry_params = [relProps];
 			}
@@ -3862,7 +3930,7 @@ DataAccess.prototype.updateRelProps = function (obj, relatedObj, relName, relPro
 				else {
 					result.rel_props = null;
 				}
-				if(relName === undefined || relName === null) {
+				if(relName == null) {
 					result.rel_name = connection.results[rIdx].rel_name;
 				}
 				else {
