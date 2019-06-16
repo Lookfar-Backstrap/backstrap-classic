@@ -453,7 +453,7 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 			db_connection.results = res.rows;
       // UNPACK ANY JSON FIELDS & STUFF THE FINAL OBJECT WITH 
       // KEYS FROM `data` FIELD
-			if (db_connection.results !== undefined && db_connection.results !== null) {
+			if (db_connection.results != null) {
         if(db_connection.results.length > 0) {
           db_connection.results = db_connection.results.map((r) =>{
             var formattedResult = {};
@@ -462,10 +462,10 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 
             let resKeys = Object.getOwnPropertyNames(r);
             resKeys.forEach((k) => {
-              if(k === 'data') {
+              if(k === 'data' && r[k] != null && r[k] != '') {
                 try {
-                  let dataObj = JSON.parse(r[k]);
-                  let dataKeys = Object.getOwnPropertyNames(r);
+                  let dataObj = r[k];
+                  let dataKeys = Object.getOwnPropertyNames(r[k]);
                   dataKeys.forEach((dk) => {
                     if(resKeys.includes(dk)) {
                       let newKey = dk+'_fromJSON';
@@ -478,9 +478,11 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
                 }
                 catch(e) {
                   // problem parsing the `data` field...just move on
+                  utilities.writeErrorToLog(e);
                 }
               }
               else if(typeof(r[k] === 'string')) {
+                // TRY UNPACKING JSON.  IF IT FAILS, THIS IS A REGULAR STRING...PROBABLY
                 try {
                   var jsonVal = JSON.parse(r[k]);
                   formattedResult[k] = jsonVal;
@@ -625,6 +627,7 @@ function getTableAndModel(obj) {
 }
 
 function psqlArray(inArray) {
+  if(inArray == null) inArray = [];
   return inArray.map(el => "'"+el+"'").join(',');
 }
 
@@ -638,11 +641,11 @@ function formatEntityResults(rawResults) {
       delete r.permissions;
       delete r.deleted_at;
 
-      var keys = Object.getOwnPropertyNames(r.data);
-      keys.forEach((k) => {
-        r[k] = r.data[k];
-      });
-      delete r.data;
+      // var keys = Object.getOwnPropertyNames(r.data);
+      // keys.forEach((k) => {
+      //   r[k] = r.data[k];
+      // });
+      // delete r.data;
 
       return r;
     });
@@ -654,11 +657,11 @@ function formatEntityResults(rawResults) {
     delete rawResults.permissions;
     delete rawResults.deleted_at;
 
-    var keys = Object.getOwnPropertyNames(rawResults.data);
-    keys.forEach((k) => {
-      rawResults[k] = rawResults.data[k];
-    });
-    delete rawResults.data;
+    // var keys = Object.getOwnPropertyNames(rawResults.data);
+    // keys.forEach((k) => {
+    //   rawResults[k] = rawResults.data[k];
+    // });
+    // delete rawResults.data;
 
     output = rawResults;
   }
@@ -789,14 +792,39 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
   }
 
 	if (obj.id !== null) {
-    var qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
-              ( \
-                permissions->'read_users' ? '*' OR \
-                permissions->'read_users' ? '"+user.id+"' OR \
-                (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
-              )";
-    var params = [obj.id];
-    
+    var qry = "";
+    var params = [];
+    if(user.id != null && user.groups != null && user.groups.length > 0) {
+      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+                ( \
+                  permissions->'read_users' ? '*' OR \
+                  permissions->'read_users' ? '"+user.id+"' OR \
+                  (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
+                )";
+      params = [obj.id];
+    }
+    else if(user.id != null) {
+      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+                ( \
+                  permissions->'read_users' ? '*' OR \
+                  permissions->'read_users' ? '"+user.id+"' \
+                )";
+      params = [obj.id];
+    }
+    else if(user.groups != null && user.groups.length > 0) {
+      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+                ( \
+                  permissions->'read_users' ? '*' OR \
+                  (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
+                )";
+      params = [obj.id];
+    }
+    else {
+      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
+              permissions->'read_users' ? '*'";
+      params = [obj.id];
+    }
+
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
     .then(function (connection) {
       if(connection.results.length === 1) {
@@ -1082,7 +1110,7 @@ DataAccess.prototype.updateEntity = function (updateObj, user, connection, callb
       qry += ", ";
     }
 
-    qry += "data = jsonb_set(data, '{"+nsk+"}', concat("+JSON.stringify(updateNoSqlProps[nsk])+")::JSONB)";
+    qry += "data = jsonb_set(data, '{"+nsk+"}', concat('"+JSON.stringify(updateNoSqlProps[nsk])+"')::JSONB)";
   });
 
   // HANDLE THE TO-ONE RELATIONSHIPS

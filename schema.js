@@ -263,12 +263,12 @@ function createDefaultUser(utilities) {
         var credentialsQry = "INSERT INTO credentials(id, password, salt, data) \
                               VALUES($1, $2, $3, $4)";
         var credentialsParams = [uid_forCreds, hashedPassword, salt, dataField];
-        return [uid_forUser, dataAccess.ExecutePostgresQuery(credentialsQry, credentialsParams, null)];
+        return [uid_forUser, uid_forCreds, dataAccess.ExecutePostgresQuery(credentialsQry, credentialsParams, null)];
       })
-      .spread(function(uid_forUser, connection) {
+      .spread(function(uid_forUser, uid_forCreds, connection) {
         qry = "INSERT INTO bsuser(id, created_at, username, first, last, \
-                email, roles, groups) VALUES($1, $2, $3, $4, $5, $6, $7, $8)";
-        qry_params = [uid_forUser, new Date(), 'bsroot', 'backstrap', 'admin', '', JSON.stringify(['super-user']), JSON.stringify(['*'])];
+                email, roles, groups, credentials) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+        qry_params = [uid_forUser, new Date(), 'bsroot', 'backstrap', 'admin', '', JSON.stringify(['super-user']), JSON.stringify(['*']), uid_forCreds];
         
         return dataAccess.ExecutePostgresQuery(qry, qry_params);
       })
