@@ -60,7 +60,8 @@ var relationshipMap = [
 
 // THESE ARE SYSTEM FIELDS WHICH SHOULD NOT BE ALTERED MANUALLY. 
 // ALL ENTITIES INCLUDE THESE KEYS.
-var immutableKeys = ['row_id', 'id', 'object_type', 'is_active', 'created_at', 'updated_at', 'deleted_at', 'record_owner', 'permitted_groups', 'permitted_users'];
+var immutableKeys = ['row_id', 'id', 'object_type', 'is_active', 'created_at', 'updated_at', 'deleted_at'];
+var permissionKeys = ['record_owner', 'permissions'];
 
 // ================================================================================
 // CONSTRUCTOR
@@ -641,12 +642,6 @@ function formatEntityResults(rawResults) {
       delete r.permissions;
       delete r.deleted_at;
 
-      // var keys = Object.getOwnPropertyNames(r.data);
-      // keys.forEach((k) => {
-      //   r[k] = r.data[k];
-      // });
-      // delete r.data;
-
       return r;
     });
   }
@@ -656,12 +651,6 @@ function formatEntityResults(rawResults) {
     delete rawResults.record_owner;
     delete rawResults.permissions;
     delete rawResults.deleted_at;
-
-    // var keys = Object.getOwnPropertyNames(rawResults.data);
-    // keys.forEach((k) => {
-    //   rawResults[k] = rawResults.data[k];
-    // });
-    // delete rawResults.data;
 
     output = rawResults;
   }
@@ -1129,12 +1118,9 @@ DataAccess.prototype.updateEntity = function (updateObj, user, connection, callb
   
   qry += " WHERE id = '"+updateObj.id+"'";
 
-  console.log(qry);
-
   var params = [];
   DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
   .then(function (connection) {
-    console.log(connection);
     deferred.resolve();
   })
   .fail(function (qry_err) {
