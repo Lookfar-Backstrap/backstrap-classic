@@ -660,6 +660,81 @@ function formatEntityResults(rawResults) {
   return output;
 }
 
+function handlePermissionsQry(userInfo, permissionType) {
+  if(permissionType == null) permissionType = 'write';
+
+  var qry = " AND ";
+
+  if(userInfo != null) {
+    if(userInfo.id != null && userInfo.groups != null && userInfo.groups.length > 0) {
+      if(permissionType.toLowerCase() === 'write') {
+        qry +=  "( \
+                  permissions->'write_users' ? '*' OR \
+                  permissions->'write_users' ? '"+userInfo.id+"' OR \
+                  (permissions->'write_groups' ?| array["+psqlArray(userInfo.groups)+"]) \
+                  OR record_owner = '"+userInfo.id+"' \
+                )";
+      }
+      else {
+        qry +=  "( \
+                  permissions->'read_users' ? '*' OR \
+                  permissions->'read_users' ? '"+userInfo.id+"' OR \
+                  (permissions->'read_groups' ?| array["+psqlArray(userInfo.groups)+"]) \
+                  OR record_owner = '"+userInfo.id+"' \
+                )";
+      }
+    }
+    else if(userInfo.id != null) {
+      if(permissionType.toLowerCase() === 'write') {
+        qry +=  "( \
+                  permissions->'write_users' ? '*' OR \
+                  permissions->'write_users' ? '"+userInfo.id+"' \
+                  OR record_owner = '"+userInfo.id+"' \
+                )";
+      }
+      else {
+        qry +=  "( \
+                  permissions->'read_users' ? '*' OR \
+                  permissions->'read_users' ? '"+userInfo.id+"' \
+                  OR record_owner = '"+userInfo.id+"' \
+                )";
+      }
+    }
+    else if(userInfo.groups != null && userInfo.groups.length > 0) {
+      if(permissionType.toLowerCase() === 'write') {
+        qry +=  "( \
+                  permissions->'write_users' ? '*' OR \
+                  (permissions->'write_groups' ?| array["+psqlArray(userInfo.groups)+"]) \
+                )";
+      }
+      else {
+        qry +=  "( \
+                  permissions->'read_users' ? '*' OR \
+                  (permissions->'read_groups' ?| array["+psqlArray(userInfo.groups)+"]) \
+                )";
+      }
+    }
+    else {
+      if(permissionType.toLowerCase() === 'write') {
+        qry += "permissions->'write_users' ? '*'";
+      }
+      else {
+        qry += "permissions->'read_users' ? '*'";
+      }
+    }
+  }
+  else {
+    if(permissionType.toLowerCase() === 'write') {
+      qry += "permissions->'write_users' ? '*'";
+    }
+    else {
+      qry += "permissions->'read_users' ? '*'";
+    }
+  }
+
+  return qry;
+}
+
 // tableName -- THE NAME OF THE TABLE TO SAVE THE ENTITY
 // obj -- THE ENTITY AS JSON INCLUDING THE 'object_type'
 // 'id', 'created_at', AND 'is_active' ARE ADDED BY THE SYSTEM
@@ -781,39 +856,13 @@ DataAccess.prototype.getEntity = function (obj, user, connection, callback) {
   }
 
 	if (obj.id !== null) {
-    var qry = "";
-    var params = [];
-    if(user.id != null && user.groups != null && user.groups.length > 0) {
-      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
-                ( \
-                  permissions->'read_users' ? '*' OR \
-                  permissions->'read_users' ? '"+user.id+"' OR \
-                  (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
-                )";
-      params = [obj.id];
-    }
-    else if(user.id != null) {
-      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
-                ( \
-                  permissions->'read_users' ? '*' OR \
-                  permissions->'read_users' ? '"+user.id+"' \
-                )";
-      params = [obj.id];
-    }
-    else if(user.groups != null && user.groups.length > 0) {
-      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
-                ( \
-                  permissions->'read_users' ? '*' OR \
-                  (permissions->'read_groups' ?| array["+psqlArray(user.groups)+"]) \
-                )";
-      params = [obj.id];
-    }
-    else {
-      qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true AND \
-              permissions->'read_users' ? '*'";
-      params = [obj.id];
-    }
+    var qry = "SELECT * FROM \"" + tableName + "\" WHERE id=$1 AND is_active=true";
+    qry += handlePermissionsQry(user, 'read');
 
+    console.log(qry);
+
+    var params = [obj.id];
+    
 		DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
     .then(function (connection) {
       if(connection.results.length === 1) {
@@ -1118,10 +1167,13 @@ DataAccess.prototype.updateEntity = function (updateObj, user, connection, callb
   
   qry += " WHERE id = '"+updateObj.id+"'";
 
+  qry += handlePermissionsQry(user, 'write');
+  
+
   var params = [];
   DataAccess.prototype.ExecutePostgresQuery(qry, params, connection)
   .then(function (connection) {
-    deferred.resolve();
+    deferred.resolve({success: true});
   })
   .fail(function (qry_err) {
     deferred.reject(qry_err.AddToError(__filename, 'updateEntity'));
