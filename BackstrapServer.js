@@ -127,44 +127,6 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		// STARTUP THE SESSION INVALIDATION -- CHECK EVERY X MINUTES
 		var timeoutInMintues = settings.data.timeout;
 		var invalidSessionTimer = setInterval(function () { checkForInvalidSessions(dataAccess, settings) }, settings.data.timeout_check * 60000);
-    
-    // let carObj =  {
-    //   object_type: 'car',
-    //   make: 'mazda',
-    //   model: '3',
-    //   color: 'black',
-    //   year: 2013,
-    //   years_registered: [2013, 2014, 2015, 2016, 2017, 2018, 2019],
-    //   bsuser: 'd912dabacf79d5e6247affd0cc066f14'
-    // }
-    // dataAccess.createEntity(carObj, {id:carObj.bsuser}, null, null, ['a'], null)
-    // .then((res) => {
-    //   //console.log(res);
-    //   let obj = {id: res.id, object_type: 'car'};
-    //   return dataAccess.getEntity(obj,{id:'d912dabacf79d5e6247affd0cc066f14', groups:['a']});
-    // })
-    // .then((get_res) => {
-    //   console.log(get_res);
-    // })
-    // .fail((err) => {
-    //   console.log(err);
-    // });
-
-    // dataAccess.getEntity({id:'83ec0f62dcd47e38fedf3a8c4bbc6b54', object_type:'car'}, {id:'d912dabacf79d5e6247affd0cc066f14', groups:['a']})
-    // .then((res) => {
-    //   console.log(res);
-    // })
-    // .fail((err) => {
-    //   console.log(err);
-    // });
-
-    dataAccess.updateEntity({id:'6f7480cda6d4f3a50ebb9c63e3176e23', object_type:'car', color:'white', model:'6', years_registered:[2017,2018,2019]}, {id:'d912dabacf79d5e6247affd0cc066f14', groups:['a']})
-    .then((res) => {
-      console.log(res);
-    })
-    .fail((err) => {
-      console.log(err);
-    });
 
 		// ========================================================
 		// SETUP ROUTE HANDLERS
