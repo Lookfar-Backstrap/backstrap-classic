@@ -58,7 +58,7 @@ AccessControl.prototype.init = function(b, f, rs) {
     }
     catch(e) {
         securityObj = require('./Security.json');
-        securityWriteLocation = './node_modules/backstrap-server/Security.json';
+        securityWriteLocation = './node_modules/backstrap-classic/Security.json';
     }
 
 		try {

@@ -43,7 +43,7 @@ Endpoints.prototype.init = function(b, f, rs) {
 			}
 			catch(e) {
 				customEndpointData = require('./Endpoints_ext.json');
-				endpointExtLocation = './node_modules/backstrap-server/Endpoints_ext.json';
+				endpointExtLocation = './node_modules/backstrap-classic/Endpoints_ext.json';
 			}
 			
 			var areas = Object.keys(customEndpointData);
@@ -51,7 +51,7 @@ Endpoints.prototype.init = function(b, f, rs) {
 				var customArea = customEndpointData[areas[aIdx]]
 				// THIS IS A NEW AREA.  JUST ADD IT TO THE ENDPOINT DATA
 				if(endpointData[areas[aIdx]] == undefined || endpointData[areas[aIdx]] == null) {
-					endpointData[areas[aIdx]] = customArea;
+					endpointData[areas[aIdx]] = customArea
 				}
 				// WE ALREADY HAVE THIS AREA, MUST CHECK EACH CONTROLLER
 				else {
@@ -504,7 +504,7 @@ Endpoints.prototype.save = function(doNetworkReload) {
 
 	if(remoteSettings == null || remoteSettings === false) {
 		var fswrite = Q.denodeify(fs.writeFile);
-		Q.all([fswrite('./node_modules/backstrap-server/Endpoints.json', JSON.stringify(systemEndpoints, null, 4)), fswrite(endpointExtLocation, JSON.stringify(customEndpoints, null, 4))])
+		Q.all([fswrite('./node_modules/backstrap-classic/Endpoints.json', JSON.stringify(systemEndpoints, null, 4)), fswrite(endpointExtLocation, JSON.stringify(customEndpoints, null, 4))])
 		.then(function(write_res) {
 			deferred.resolve(true);
 		})
@@ -512,7 +512,7 @@ Endpoints.prototype.save = function(doNetworkReload) {
 			var errorObj = new ErrorObj(400, 
 										'e0002', 
 										__filename, 
-										'save', 
+										'save',
 										'error writing to Endpoints config file',
 										'External error',
 										err

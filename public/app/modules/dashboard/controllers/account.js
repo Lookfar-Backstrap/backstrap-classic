@@ -143,7 +143,7 @@ function ($rootScope, $scope, $state, $location, $q, backstrap_service, Flash, M
 
     $scope.validateName = function(){
         if ($scope.user.username !== undefined && $scope.user.username !== null && $scope.user.username.length > 0){
-            $scope.user.username = $scope.user.username.replace(/[^a-zA-Z]/g,'_').trim().toLowerCase();  
+            $scope.user.username = $scope.user.username.replace(/[^a-zA-Z\d\.@_-]/g,'_').trim().toLowerCase();  
         }
     }      
 

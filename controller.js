@@ -195,7 +195,7 @@ exports.getVersionOfWebService = function getVersionOfWebService(areaName, contr
 	var servicesDir;
 	var rootServicesDir;
 	if(areaName === 'common') {
-		rootServicesDir = './node_modules/backstrap-server/common/';
+		rootServicesDir = './node_modules/backstrap-classic/common/';
 		servicesDir = './common/';
 	}
 	else {

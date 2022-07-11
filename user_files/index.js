@@ -1,1 +1,1 @@
-require('backstrap-server');
+require('backstrap-classic');

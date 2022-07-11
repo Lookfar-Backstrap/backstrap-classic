@@ -37,8 +37,8 @@ __Create The Database__
 __Install And Run Backstrap Server__
 - Go to project root
 - Run `npm init`
-- Run `npm install --save backstrap-server`
-- Copy the contents of [Project Root]/node_modules/backstrap-server/user_files/ and paste them to [Project Root]/
+- Run `npm install --save backstrap-classic`
+- Copy the contents of [Project Root]/node_modules/backstrap-classic/user_files/ and paste them to [Project Root]/
 - Open [Project Root]/config/config.local.js 
     - Enter the name of your db user 
     - Enter the database to use
@@ -172,7 +172,7 @@ $ sudo apt-get install postgresql postgresql-contrib
 
 
 ### Install and Run Backstrap Server:
-You can install Backstrap Server either by checking out the git repository (https://github.com/Lookfar-Backstrap/backstrap) or by using npm (npm install --save backstrap-server), and depending which route you select, your project root will be organized differently.
+You can install Backstrap Server either by checking out the git repository (https://github.com/Lookfar-Backstrap/backstrap) or by using npm (npm install --save backstrap-classic), and depending which route you select, your project root will be organized differently.
 
 ### Using git:
 Once you've checked out the repository, you'll have a project root with many of the Core, Configuration, and Extension files all mixed together.  This method of installing is useful if you intend to work on/contribute code to the Backstrap Server open-source project, or if you expect to heavily modify the Core files and do not intend to update your version of Backstrap.  Here is what your project root will contain:
@@ -241,8 +241,8 @@ Check your package.json file to make sure the npm start script will run `node Ba
 ### Using npm:
 In general, this is the preferred method for using Backstrap Server.  It will keep your project root clean and allows for easy updates to the core system.
 
-From your blank project root, run `npm install -s backstrap-server`.
-Navigate to [PROJECT ROOT]/node_modules/backstrap-server/user_files
+From your blank project root, run `npm install -s backstrap-classic`.
+Navigate to [PROJECT ROOT]/node_modules/backstrap-classic/user_files
 Copy all files from that directory and past them in your project root.
 Your project root should now look like this:
 ```
