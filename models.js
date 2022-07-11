@@ -30,7 +30,7 @@ Models.prototype.init = function(b, f, rs) {
 										__filename, 
 										'init', 
 										'error fetching models file',
-										'Config error',backstrap-classic
+										'Config error',
 										e
 										);
 			deferred.reject(errorObj);

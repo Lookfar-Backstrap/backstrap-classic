@@ -33,7 +33,7 @@ Settings.prototype.init = function(b, f, rs) {
 	}
 	else {
 		s3.getObject({Bucket: bucket, Key: file}, function(err, res) {
-			if(!err) {backstrap-classic
+			if(!err) {
 				var f = JSON.parse(res.Body.toString());
 				Settings.prototype.data = JSON.parse(JSON.stringify(f));
 				deferred.resolve(true);

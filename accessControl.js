@@ -58,7 +58,7 @@ AccessControl.prototype.init = function (b, f, rs) {
                                       'ac0020',
                                       __filename,
                                       'init',
-                                      'problem gbackstrap-classicey from auth0',
+                                      'problem getting signing key from auth0',
                                       'Initialization Failure.  Please contact your administrator.',
                                       keyErr);
           deferred.reject(errorObj);

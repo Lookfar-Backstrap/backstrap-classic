@@ -43,7 +43,7 @@ Endpoints.prototype.init = function(b, f, rs) {
 				var customArea = customEndpointData[areas[aIdx]]
 				// THIS IS A NEW AREA.  JUST ADD IT TO THE ENDPOINT DATA
 				if(endpointData[areas[aIdx]] == undefined || endpointData[areas[aIdx]] == null) {
-					endpointData[areas[aIdx]] = customArebackstrap-classic
+					endpointData[areas[aIdx]] = customArea
 				}
 				// WE ALREADY HAVE THIS AREA, MUST CHECK EACH CONTROLLER
 				else {
@@ -504,7 +504,7 @@ Endpoints.prototype.save = function(doNetworkReload) {
 			var errorObj = new ErrorObj(400, 
 										'e0002', 
 										__filename, 
-										'save', backstrap-classic
+										'save',
 										'error writing to Endpoints config file',
 										'External error',
 										err
