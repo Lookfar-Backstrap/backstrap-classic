@@ -8,6 +8,7 @@
 - [Security](#security)
 - [Using Extension Files](#using-extension-files)
 - [Using the ORM](#using-the-orm)
+- [Multi-Part-Form-Data](#multi-part-form-data)
 - [Additional Features](#additional-features)
 
 
@@ -892,6 +893,11 @@ Taking it a step further, you may want to name these relationships.  For example
 }
 ```
 This describes simple car and address models with a relationship between them.
+
+---
+
+## Multi-Part-Form-Data
+BS3 supports JSON and Multi-Part-Form-Data requests.  To attach a file or files as multi-part-form-data, put the byte stream in a multi-part-form-data field called `mpfd_files`.  On requests that include a file stream, you can access them at req.files from your controller.
 
 ---
 

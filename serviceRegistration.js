@@ -659,6 +659,15 @@ ServiceRegistration.prototype.validateArguments = function(call, area, controlle
 							break;
 						}
 					}
+					else if(arg.type === 'filestreamarray') {
+						// THIS IS A MULTER ARRAY OF FILE UPLOADS
+						// FOR NOW JUST MAKE SURE WE HAVE AN ARRAY
+						if(!Array.isArray(inputArgs[arg.name])) {
+						  isValid = false;
+						  invalidArgs.push(arg.name);
+						  break;
+						}
+					}
 					else if(arg.type === '*') {
 						// VALID
 					}
