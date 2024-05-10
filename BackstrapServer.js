@@ -30,8 +30,6 @@ var AccessControl = require('./accessControl').AccessControl;
 var Models = require('./models.js').Models;
 var schemaControl = require('./schema.js');
 
-const rootDir = path.dirname(require.main.filename);
-
 // ---------------------------------
 // SETUP EXPRESS
 // ---------------------------------
