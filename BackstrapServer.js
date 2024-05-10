@@ -14,7 +14,9 @@ var bodyParser = require('body-parser');
 var Q = require('q');
 var fs = require('fs');
 var async = require('async');
-
+const rootDir = path.dirname(require.main.filename);
+const multer = require('multer');
+const upload = multer();
 
 require('./ErrorObj');
 
@@ -39,7 +41,25 @@ const requestSizeLimit = (process.env.MAX_REQUEST_SIZE && !isNaN(process.env.MAX
 app.use(bodyParser.json({ limit: requestSizeLimit }));		// THIS IS A HIGH DEFAULT LIMIT SINCE BACKSTRAP ALLOWS BASE64 ENCODED FILE UPLOAD
 app.use(bodyParser.urlencoded({ extended: true }));			// DETERMINE IF THIS IS HTML OR JSON REQUEST
 app.use(express.static(path.join(__dirname, 'public')));	// MAP STATIC PAGE CALLS TO public FOLDER
+// UPLOAD FILES AS form-data IN A FIELD CALLED "mpfd_files"
+app.use(upload.array("mpfd_files", 10));
 app.use(cors());
+
+
+// PASS THE HANDLE TO THE EXPRESS APP INTO
+// express_init.js SO THE USER CAN ADD EXPRESS MODULES
+try {
+  require(`${rootDir}/expressSettings`).init(app);
+}
+catch(expressInitErr) {
+  if(expressInitErr && expressInitErr.code === 'MODULE_NOT_FOUND') {
+    console.log('Express settings script skipped -- no file found');
+  }
+  else {
+    console.error(expressInitErr);
+  }
+}
+
 
 if(process.env.DEBUG_MODE != null && (process.env.DEBUG_MODE === true || process.env.DEBUG_MODE.toString().toLowerCase() === 'true')) {
   process.on('warning', e => console.warn(e.stack));       // USEFUL IN DEBUGGING
