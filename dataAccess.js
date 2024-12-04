@@ -81,15 +81,27 @@ var immutableKeys = ['id', 'object_type', 'is_active', 'created_at', 'updated_at
 var DataAccess = function (dbConfig, mdls, util, settings) {
 	utilities = util;
 
-	//INSTANTIATE THE PG pool CONSTANT
-	pool = new Pool({
-		user: dbConfig.db.user,
-		host: dbConfig.db.host,
-		database: dbConfig.db.name,
-		password: dbConfig.db.pass,
-		port: dbConfig.db.port,
-		max: dbConfig.db.max_connections || 1000
-	});
+	try {
+		//INSTANTIATE THE PG pool CONSTANT
+			pool = new Pool({
+			user: dbConfig.db.user,
+			host: dbConfig.db.host,
+			database: dbConfig.db.name,
+			password: dbConfig.db.pass,
+			port: dbConfig.db.port,
+			max: dbConfig.db.max_connections || 1000,
+			ssl: dbConfig.db.ssl == null || dbConfig.db.ssl == false ? false : {
+				rejectUnauthorized: true,
+				ca: dbConfig.db.ssl.ca == null ? null : fs.readFileSync(dbConfig.db.ssl.ca),
+				key: dbConfig.db.ssl.key == null ? null : fs.readFileSync(dbConfig.db.ssl.key),
+				cert: dbConfig.db.ssl.cert == null ? null : fs.readFileSync(dbConfig.db.ssl.cert)
+			}
+		});
+	}
+	catch(err) {
+		console.error(err);
+		throw('Database Connection Failed');
+	}
 
   this.extension = new DataAccessExtension(this, dbConfig, mdls);
   
