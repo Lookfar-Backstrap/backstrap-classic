@@ -227,7 +227,12 @@ module.exports = {
    name: process.env.DB_NAME || '[YOUR DB NAME HERE]',
    pass: process.env.DB_PASS || '[YOUR DB PASSWORD HERE]',
    host: process.env.DB_HOST || 'localhost',
-   port: process.env.DB_PORT || '5432'
+   port: process.env.DB_PORT || '5432',
+   ssl: {
+    ca: process.env.DB_SSL_CA || null,
+    key: process.env.DB_SSL_KEY || null,
+    cert: process.env.DB_SSL_CERT || null
+   }
  },
  s3: {
    bucket: '[YOUR BUCKET HERE]'
@@ -897,7 +902,19 @@ This describes simple car and address models with a relationship between them.
 ---
 
 ## Multi-Part-Form-Data
-BS3 supports JSON and Multi-Part-Form-Data requests.  To attach a file or files as multi-part-form-data, put the byte stream in a multi-part-form-data field called `mpfd_files`.  On requests that include a file stream, you can access them at req.files from your controller.
+Backstrap supports JSON and Multi-Part-Form-Data requests.  To attach a file or files as multi-part-form-data, put the byte stream in a multi-part-form-data field called `mpfd_files`.  On requests that include a file stream, you can access them at req.files from your controller.
+
+---
+
+## onInit.js
+Backstrap calls onInit.run() once initialization is complete.  Any program-specific initialization can be done in that function.  `DataAccess`, `utilities`, `accessControl`, `serviceRegistration`, and `settings` are all available within the run method, so all data service files and custom utilities are available to use.
+
+---
+
+## expressSettings.js
+Backstrap calls the `init(expressApp)` method of this file during initialization.  This means that any middleware you want to apply to Express can be accomplished via `expressApp.use()` and other express-specific calls.
+
+The second method in this file is `routeOverrides(app, dataAccess, utilities)`.  Routes defined in this function will take precedence over the Backstrap route-parsing system.  So rather than breaking apart an endpoint as /[area]/[controller]/[method]/[version], you can define a specifc url like `/heres/my/endpoint` and handle the logic just like a raw express app.  And you still have access to `dataAccess` to call your data services or to query the db directly.
 
 ---
 

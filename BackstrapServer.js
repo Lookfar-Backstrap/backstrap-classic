@@ -61,6 +61,7 @@ try {
 }
 catch(expressInitErr) {
   console.error('ExpressSettings initialization failed');
+  console.error(expressInitErr);
 }
 
 
@@ -163,6 +164,18 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 		var timeoutInMintues = settings.data.timeout;
     var invalidSessionTimer = setInterval(function () { checkForInvalidSessions(dataAccess, settings) }, settings.data.timeout_check * 60000);
     
+    // EVERYTHING IS INITIALIZED.  RUN ANY INITIALIZATION CODE
+    try {
+      require(`${rootDir}/onInit`).run(DataAccess, Utilities, AccessControl, ServiceRegistration, Settings);
+    }
+    catch(onInitErr) {
+      if(onInitErr && onInitErr.code === 'MODULE_NOT_FOUND') {
+        console.log('Initialization script skipped -- no file found');
+      }
+      else {
+        console.error(onInitErr);
+      }
+    }
     
 		// ========================================================
 		// SETUP ROUTE HANDLERS
@@ -175,6 +188,7 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
     }
     catch(err) {
       console.error('Override Routes Failed');
+      console.error(err);
     }
 		// ---------------------------------------------------------------------------------
 		// GETS
@@ -259,6 +273,7 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 			console.log('----------------------------------------------');
 			console.log('----------------------------------------------');
 			console.log('Express server listening on port ' + app.get('port'));
+      console.log(`Started @ ${new Date().toISOString()}`);
 			console.log('');
 
 			if (useRemoteSettings) {
