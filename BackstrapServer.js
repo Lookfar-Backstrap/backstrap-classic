@@ -183,12 +183,14 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
     // ---------------------------------------------------------------------------------
     // OVERRIDES
     // ---------------------------------------------------------------------------------
-    try {
-      expressSettings.overrideRoutes(app, dataAccess, utilities);
-    }
-    catch(err) {
-      console.error('Override Routes Failed');
-      console.error(err);
+    if(expressSettings) {
+      try {
+        expressSettings.overrideRoutes(app, dataAccess, utilities);
+      }
+      catch(err) {
+        console.error('Override Routes Failed');
+        console.error(err);
+      }
     }
 		// ---------------------------------------------------------------------------------
 		// GETS
