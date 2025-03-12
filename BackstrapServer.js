@@ -166,7 +166,7 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
     
     // EVERYTHING IS INITIALIZED.  RUN ANY INITIALIZATION CODE
     try {
-      require(`${rootDir}/onInit`).run(DataAccess, Utilities, AccessControl, ServiceRegistration, Settings);
+      require(`${rootDir}/onInit`).run(dataAccess, utilities, accessControl, serviceRegistration, settings);
     }
     catch(onInitErr) {
       if(onInitErr && onInitErr.code === 'MODULE_NOT_FOUND') {
