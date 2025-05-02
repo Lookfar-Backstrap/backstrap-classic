@@ -42,8 +42,8 @@ var backstrapSql = require('./backstrapSql.js').BackstrapSql;
 
 var utilities;
 var models;
-var dbConnection;
 var pool;
+var multisource = false;
 
 // KEEPS TRACK OF THE TABLE NAME FOR EACH object_type.
 var typeToCollectionMap = {
@@ -80,29 +80,100 @@ var immutableKeys = ['id', 'object_type', 'is_active', 'created_at', 'updated_at
 // ------------------------------------------------------------------
 var DataAccess = function (dbConfig, mdls, util, settings) {
 	utilities = util;
+	this.dbs = {};
 
 	try {
-		// ARE WE CONFIGURED FOR SSL
-		let sslDesc = false;
-		if(dbConfig.db.ssl === true) sslDesc = true;
-		if(dbConfig.db.ssl != null && (dbConfig.db.ssl.ca || dbConfig.db.ssl.key || dbConfig.db.ssl.cert)) {
-			sslDesc = {
-				rejectUnauthorized: true,
-				ca: dbConfig.db.ssl.ca == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.ca.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.ca}`),
-				key: dbConfig.db.ssl.key == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.key.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.key}`),
-				cert: dbConfig.db.ssl.cert == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.cert.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.cert}`)
-			};
+		// SINGLE DATABASE
+		if(!Array.isArray(dbConfig.db)) {
+			// ARE WE CONFIGURED FOR SSL
+			let sslDesc = false;
+			if(dbConfig.db.ssl === true) sslDesc = true;
+			if(dbConfig.db.ssl != null && (dbConfig.db.ssl.ca || dbConfig.db.ssl.key || dbConfig.db.ssl.cert)) {
+				sslDesc = {
+					rejectUnauthorized: true,
+					ca: dbConfig.db.ssl.ca == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.ca.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.ca}`),
+					key: dbConfig.db.ssl.key == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.key.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.key}`),
+					cert: dbConfig.db.ssl.cert == null ? null : fs.readFileSync(`${['/', '\\'].includes(dbConfig.db.ssl.cert.substring(0,1)) ? '' : rootDir + '/'}${dbConfig.db.ssl.cert}`)
+				};
+			}
+			//INSTANTIATE THE PG pool CONSTANT
+				pool = new Pool({
+				user: dbConfig.db.user,
+				host: dbConfig.db.host,
+				database: dbConfig.db.name,
+				password: dbConfig.db.pass,
+				port: dbConfig.db.port,
+				max: dbConfig.db.max_connections || 1000,
+				ssl: sslDesc
+			});
+
+			// SET AN ENTRY IN THE ARRAY OF DATABASE-SPECIFIC FUNCTIONS
+			// THIS ALLOWS dataAccess.dbs['default'].getDbConnection() ETC
+			// TO KEEP THINGS STANDARD BETWEEN SINGLE AND MULTI DATASOURCE
+			// CONFIGURATIONS
+			this.dbs['default'] = {
+				getDbConnection: () => this.getDbConnection(),
+				resolveDbConnection: (conn) => this.resolveDbConnection(conn),
+				startTransaction: () => this.startTransaction(),
+				runSql: (qry, params, conn, isStreaming) => this.runSql(qry, params, conn, isStreaming),
+				ExecutePostgresQuery: (qry, params, conn, isStreaming) => this.runSql(qry, params, conn, isStreaming)
+			}
 		}
-		//INSTANTIATE THE PG pool CONSTANT
-			pool = new Pool({
-			user: dbConfig.db.user,
-			host: dbConfig.db.host,
-			database: dbConfig.db.name,
-			password: dbConfig.db.pass,
-			port: dbConfig.db.port,
-			max: dbConfig.db.max_connections || 1000,
-			ssl: sslDesc
-		});
+		// MULTIPLE DATABASES
+		else {
+			multisource = true;
+			pool = {};
+			let firstOne = true;
+			for(let db of dbConfig.db) {
+				// ARE WE CONFIGURED FOR SSL
+				let sslDesc = false;
+				if(db.ssl === true) sslDesc = true;
+				if(db.ssl != null && (db.ssl.ca || db.ssl.key || db.ssl.cert)) {
+					sslDesc = {
+					rejectUnauthorized: true,
+					ca: db.ssl.ca == null ? null : fs.readFileSync(`${['/', '\\'].includes(db.ssl.ca.substring(0,1)) ? '' : rootDir + '/'}${db.ssl.ca}`),
+					key: db.ssl.key == null ? null : fs.readFileSync(`${['/', '\\'].includes(db.ssl.key.substring(0,1)) ? '' : rootDir + '/'}${db.ssl.key}`),
+					cert: db.ssl.cert == null ? null : fs.readFileSync(`${['/', '\\'].includes(db.ssl.cert.substring(0,1)) ? '' : rootDir + '/'}${db.ssl.cert}`)
+					};   
+				}
+
+				let dbName = firstOne === true ? 'default' : db.nickname || db.name;
+
+				try {
+					// CONNECT TO THE DB
+					pool[dbName] = new Pool({
+												user: db.user,
+												host: db.host,
+												database: db.name,
+												password: db.pass,
+												port: db.port,
+												max: db.max_connections || 1000,
+												ssl: sslDesc
+											});
+
+					// SET AN ENTRY IN THE ARRAY OF DATABASE-SPECIFIC FUNCTIONS
+					this.dbs[dbName] = {
+						getDbConnection: () => this.getDbConnection(dbName),
+						resolveDbConnection: (conn) => this.resolveDbConnection(conn, dbName),
+						startTransaction: () => this.startTransaction(dbName),
+						runSql: (qry, params, conn, isStreaming) => this.runSql(qry, params, conn, isStreaming, dbName),
+						ExecutePostgresQuery: (qry, params, conn, isStreaming) => this.runSql(qry, params, conn, isStreaming, dbName)
+					}
+				}
+				catch(dbConErr) {
+					if(firstOne === true) {
+						console.error(dbConErr);
+						throw('Primary database connection failed');
+					}
+					else {
+						console.error(`Connection to non-primary database ${dbName} failed`);
+						console.error(dbConErr);
+					}
+				}
+
+				if(firstOne === true) firstOne = false;
+			}
+		}
 	}
 	catch(err) {
 		console.error(err);
@@ -118,7 +189,7 @@ var DataAccess = function (dbConfig, mdls, util, settings) {
     let services = fs.readdirSync(serviceDir);
     services.forEach((serviceFile) => {
       // DON'T OVERWRITE dataAccess.extension
-      if(serviceFile.toLowerCase() !== 'extension') {
+      if(!['extension', 'dbs'].includes(serviceFile.toLowerCase())) {
         let fileNoExt = serviceFile.replace('.js', '');
         try {
           let Service = require(serviceDir+'/'+serviceFile)[fileNoExt];
@@ -233,25 +304,46 @@ DataAccess.prototype.CreateDatabase = function (db_name, db_user, db_pass, db_ho
 // rolling back transactions
 // -------------------------------------------------------------------
 // START A CONNECTION TO THE DATABASE TO USE FUNCTIONS 
-DataAccess.prototype.getDbConnection = function (callback) {
+DataAccess.prototype.getDbConnection = function (db, callback) {
 	var deferred = Q.defer();
-
-	pool.connect((err, client, done) => {
-		if (!err) {
-			deferred.resolve({ 'client': client, 'release': done, 'transactional': false, 'results': [], isReleased: false });
-		}
-		else {
-			var errorObj = new ErrorObj(500,
-				'da9004',
-				__filename,
-				'getDbConnection',
-				'error creating connection to postgres',
-				'Database error',
-				err
-			);
-			deferred.reject(errorObj);
-		}
-	});
+	if(multisource !== true) {
+		pool.connect((err, client, done) => {
+			if (!err) {
+				deferred.resolve({ 'client': client, 'release': done, 'transactional': false, 'results': [], isReleased: false });
+			}
+			else {
+				var errorObj = new ErrorObj(500,
+					'da9004',
+					__filename,
+					'getDbConnection',
+					'error creating connection to postgres',
+					'Database error',
+					err
+				);
+				deferred.reject(errorObj);
+			}
+		});
+	}
+	else {
+		let thisDB = 'default'
+        if(db != null) thisDB = db;
+        pool[thisDB].connect((err, client, done) => {
+          if (!err) {
+            deferred.resolve({ 'client': client, 'release': done, 'transactional': false, 'results': [], isReleased: false });
+          }
+          else {
+            var errorObj = new ErrorObj(500,
+              'da9004',
+              __filename,
+              'getDbConnection',
+              'error creating connection to postgres',
+              'Database error',
+              err
+            );
+            reject(errorObj);
+          }
+        });
+	}
 
 	deferred.promise.nodeify(callback);
 	return deferred.promise;
@@ -287,10 +379,10 @@ DataAccess.prototype.closeDbConnection = function (connection, callback) {
 };
 
 // GET A CONNECTION TO THE DATABASE AND START A TRANSACTION
-DataAccess.prototype.startTransaction = function (callback) {
+DataAccess.prototype.startTransaction = function (db, callback) {
 	var deferred = Q.defer();
 
-	DataAccess.prototype.getDbConnection()
+	DataAccess.prototype.getDbConnection(db)
 		.then(function (connection) {
 			//SET TRANSACTIONAL
       connection['transactional'] = true;
@@ -436,11 +528,11 @@ DataAccess.prototype.rollbackTransaction = function (connection, callback) {
 };
 
 //THIS FUNCTION IS USED SO ONE FUNCTION CAN RESOLVE THE CURRENT CONNECTION STATE AND RETURN A CONNECTION
-function resolveDbConnection(connection, callback) {
+function resolveDbConnection(connection, db, callback) {
 	var deferred = Q.defer();
 	
 	if(connection == null) {
-		DataAccess.prototype.getDbConnection()
+		DataAccess.prototype.getDbConnection(db)
 		.then(function(db_connection) {
 			deferred.resolve(db_connection);
 		})
@@ -463,6 +555,7 @@ function resolveDbConnection(connection, callback) {
 	deferred.promise.nodeify(callback);
 	return deferred.promise;
 }
+DataAccess.prototype.resolveDbConnection = resolveDbConnection;
 
 // RELEASES A CONNECTION (IF YOU NEED TO DO THAT MANUALLY)
 function releaseConnection(connection) {
@@ -509,11 +602,12 @@ function releaseConnection(connection) {
 
 	return deferred.promise;
 }
+DataAccess.prototype.releaseConnection = releaseConnection;
 
 // ================================================================================
 //THIS FUNCTION GLOBALIZES ALL QUERIES (SELECT) AND NON QUERIES (INSERT UPDATE DELETE ETC)
 //CONDITIONALLY CREATES AND DESTROYS CONNECTIONS DEPENDING IF THEY ARE TRANSACTIONAL OR NOT
-DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection, includeRowId, isStreaming, callback) {
+DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection, includeRowId, isStreaming, db, callback) {
 	var deferred = Q.defer();
 	var pg_query = query;
 	//THE QUERY CONFIG OBJECT DOES NOT WORK IF THERE IS AN EMPTY ARRAY OF PARAMS
@@ -528,7 +622,7 @@ DataAccess.prototype.ExecutePostgresQuery = function (query, params, connection,
 		includeRowId = false;
 	}
 
-	resolveDbConnection(connection)
+	resolveDbConnection(connection, db)
 	.then(function(db_connection) {
 
     // PERFORM THE QUERY
@@ -3003,10 +3097,10 @@ DataAccess.prototype.t_joinWhereAndResolve = function (connection, objectType, o
 // These functions handle various common tasks
 // -------------------------------------------------------------------
 // RUN ARBITRARY SQL STATEMENTS
-DataAccess.prototype.runSql = function (sqlStatement, params, connection, isStreaming) {
+DataAccess.prototype.runSql = function (sqlStatement, params, connection, isStreaming, db) {
 	var deferred = Q.defer();
 	
-	DataAccess.prototype.ExecutePostgresQuery(sqlStatement, params, connection, null, isStreaming)
+	DataAccess.prototype.ExecutePostgresQuery(sqlStatement, params, connection, null, isStreaming, db)
 	.then(function (connection) {
 		deferred.resolve(connection.results);
 	})
