@@ -392,6 +392,66 @@ AccessControl.prototype.signIn = (params, apiToken) => {
   return deferred.promise;
 }
 
+AccessControl.prototype.forgotPassword = (email, username) => {
+  var deferred = Q.defer();
+    
+  dataAccess.findUser(email, username)
+    .then(function(userObj) {
+        if (userObj.is_locked) {
+            var errorObj = new ErrorObj(403,
+                'ac2006',
+                __filename,
+                'forgotPassword',
+                'bsuser is locked',
+                'Unauthorized',
+                null
+            );
+            deferred.reject(errorObj);
+
+            deferred.promise.nodeify(callback);
+            return deferred.promise;
+        }
+        return [userObj, utilities.getHash(null, null, 48)];
+    })
+    .spread(function(userObj, tkn) {
+        if (userObj.forgot_password_tokens === undefined || userObj.forgot_password_tokens === null) {
+            userObj.forgot_password_tokens = [tkn];
+        }
+        else {
+            userObj.forgot_password_tokens.push(tkn);
+        }
+        return [userObj, tkn, dataAccess.saveEntity('bsuser', userObj)];
+    })
+    .spread(function(userObj, tkn, save_res) {
+        var resolveObj = {'user': userObj, 'token': tkn };
+        deferred.resolve(resolveObj);
+    })
+    .fail(function(err) {
+      // IF THE USER ISN'T FOUND, PASS NULL BACK
+        if(err != null && err.err_code == 'da0200'){
+            deferred.resolve(null);
+        }
+        // OTHERWISE IT'S A REAL ERROR
+        else if (err != null && typeof (err.AddToError) == 'function') {
+            err.setMessages('error with forgotPassword', 'Problem starting the password reset process');
+            deferred.reject(err.AddToError(__filename, 'forgotPassword'));
+        }
+        else {
+            var errorObj = new ErrorObj(500,
+                'ac1032',
+                __filename,
+                'forgotPassword',
+                'error with forgotPassword',
+                'Problem starting the password reset process',
+                err
+            );
+            deferred.reject(errorObj);
+        }
+    });
+
+    return deferred.promise;
+}
+
 AccessControl.prototype.checkCredentials = (password, userObj) => {
   var deferred = Q.defer();
 
