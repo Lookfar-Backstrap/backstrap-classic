@@ -1291,25 +1291,12 @@ Accounts.prototype.post = {
         }
 
         if (validArgs) {
-            dataAccess.findUser(email, username)
-                .then(function(userObj) {
-                    if (userObj.is_locked) {
-                        var errorObj = new ErrorObj(403,
-                            'a2006',
-                            __filename,
-                            'forgotPassword',
-                            'bsuser is locked',
-                            'Unauthorized',
-                            null
-                        );
-                        deferred.reject(errorObj);
+            accessControl.forgotPassword(email, username)
+            .then((fpwRes) => {
+                if(fpwRes != null) {
+                    let userObj = fpwRes.user;
+                    let tkn = fpwRes.token;
 
-                        deferred.promise.nodeify(callback);
-                        return deferred.promise;
-                    }
-                    return [userObj, utilities.getHash(null, null, 48)];
-                })
-                .spread(function(userObj, tkn) {
                     var reset_link = process.env.reset_password_link || "";
                     reset_link = (reset_link == "" || reset_link == "FILL_IN") ? tkn : reset_link + '?token=' + tkn;
 
@@ -1322,45 +1309,31 @@ Accounts.prototype.post = {
                       var message = 'Reset password: ' + reset_link;
                       return [userObj, tkn, utilities.sendMail(userObj.email, 'Password Reset', message)];
                     }
-                })
-                .spread(function(userObj, tkn, mail_res) {
-                    if (userObj.forgot_password_tokens === undefined || userObj.forgot_password_tokens === null) {
-                        userObj.forgot_password_tokens = [tkn];
-                    }
-                    else {
-                        userObj.forgot_password_tokens.push(tkn);
-                    }
-                    return [tkn, dataAccess.saveEntity('bsuser', userObj)];
-                })
-                .spread(function(tkn, save_res) {
-                    // ADD EVENT TO SESSION
-                    var resolveObj = { 'success': true };
+                }
+                else {
+                    // USER WASN'T FOUND, JUST RETURN SUCCESS
+                    var resolveObj = { 
+                                        'success': true,
+                                        'uExists': false
+                                    };
                     deferred.resolve(resolveObj);
-                })
-                .fail(function(err) {
-                    if(err != null && err.err_code == 'da0200'){
-                        var resolveObj = { 
-                            'success': true,
-                            'uExists': false
-                        };
-                        deferred.resolve(resolveObj);
-                    }
-                    else if (err != null && typeof (err.AddToError) == 'function') {
-                        err.setMessages('error generating password reset link', 'Problem generating email and link to reset password');
-                        deferred.reject(err.AddToError(__filename, 'forgotPassword'));
-                    }
-                    else {
-                        var errorObj = new ErrorObj(500,
-                            'a1032',
-                            __filename,
-                            'forgotPassword',
-                            'error generating password reset link',
-                            'Problem generating email and link to reset password',
-                            err
-                        );
-                        deferred.reject(errorObj);
-                    }
-                });
+                    return;
+                }
+            })
+            .then(() => {
+                deferred.resolve({'success': true});
+            })
+            .fail((err) => {
+                var errorObj = new ErrorObj(500,
+                                    'a1031',
+                                    __filename,
+                                    'forgotPassword',
+                                    'error generating password reset link',
+                                    'Problem generating email and link to reset password',
+                                    err
+                                );
+                deferred.reject(errorObj);
+            })
         }
         else {
             var errorObj = new ErrorObj(400,

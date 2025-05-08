@@ -143,8 +143,24 @@ settings.init(config.s3.bucket, 'Settings.json', useRemoteSettings)
 	.then(function (ge_res) {
 		console.log('Models generated');
 		// CREATE ANY NEW DB TABLES BASED ON MODELS
-		return schemaControl.updateSchema(models, config.db.name, config.db.user, config.db.pass, config.db.host, config.db.port, utilities)
-	})
+    let dbInfo = {
+      name: config.db.name,
+      user: config.db.user,
+      pass: config.db.pass,
+      host: config.db.host,
+      port: config.db.port
+    };
+    if(Array.isArray(config.db)) {
+      dbInfo = {
+        name: config.db[0].name,
+        user: config.db[0].user,
+        pass: config.db[0].pass,
+        host: config.db[0].host,
+        port: config.db[0].port
+      }
+    }
+    return schemaControl.updateSchema(models, dbInfo.name, dbInfo.user, dbInfo.pass, dbInfo.host, dbInfo.port, utilities);
+  })
 	.then(function (us_Res) {
     console.log('Schema updated');
     
