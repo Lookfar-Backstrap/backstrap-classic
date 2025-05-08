@@ -212,37 +212,7 @@ Settings.json — Configuration file with general server settings such as sessio
 utilities_ext.js — Extension file for utilities.js
 utilities.js — Core file with general functions useful across all controllers
 ```
-
-Before starting up the server, you'll need to add some connection info for the database you want Backstrap to use.  In the `/config` directory, you'll see three files:
-
-- config.development.js
-- config.local.js
-- config.production.js
-
-They all have the same format, but depending on the environment variable NODE_ENV detected by the system, it will select the matching connection info.  This lets you change from your development server to your prod server by just restarting after changing your environment variables.  If NODE_ENV isn't found or doesn't match 'development', 'local', or 'production', the system will default to 'local' and use `config.local.js`.  Here is `config.local.js` as it comes out-of-the-box:
-```
-module.exports = {
- db: {
-   user: process.env.DB_USER || '[YOUR DB USER HERE]',
-   name: process.env.DB_NAME || '[YOUR DB NAME HERE]',
-   pass: process.env.DB_PASS || '[YOUR DB PASSWORD HERE]',
-   host: process.env.DB_HOST || 'localhost',
-   port: process.env.DB_PORT || '5432',
-   ssl: {
-    ca: process.env.DB_SSL_CA || null,
-    key: process.env.DB_SSL_KEY || null,
-    cert: process.env.DB_SSL_CERT || null
-   }
- },
- s3: {
-   bucket: '[YOUR BUCKET HERE]'
- }
-};
-```
-If you are running Backstrap Server locally, or on a single server instance (eg. one ec2 instance), you can leave s3.bucket alone.  Fill in the required information the database you plan to use.  Don't worry about setting up any tables, as Backstrap will spool up everything it needs automatically to get going (assuming your postgres user permissions permit this).  If you are running Backstrap Server on a horizontally scaled network of servers, s3.bucket must point to the s3 bucket where you plan to store the Configuration files to which all instances will need access (more on this later).
-
 Check your package.json file to make sure the npm start script will run `node BackstrapServer.js`.  And finally run `npm start` to launch the server.
-
 
 ### Using npm:
 In general, this is the preferred method for using Backstrap Server.  It will keep your project root clean and allows for easy updates to the core system.
@@ -275,6 +245,34 @@ Run `npm start` to launch the server.
 
 
 ## On First Launch:
+Before starting up the server, you'll need to add some connection info for the database you want Backstrap to use.  In the `/config` directory, you'll see three files:
+
+- config.development.js
+- config.local.js
+- config.production.js
+
+They all have the same format, but depending on the environment variable NODE_ENV detected by the system, it will select the matching connection info.  This lets you change from your development server to your prod server by just restarting after changing your environment variables.  If NODE_ENV isn't found or doesn't match 'development', 'local', or 'production', the system will default to 'local' and use `config.local.js`.  Here is `config.local.js` as it comes out-of-the-box:
+```
+module.exports = {
+ db: {
+   user: process.env.DB_USER || '[YOUR DB USER HERE]',
+   name: process.env.DB_NAME || '[YOUR DB NAME HERE]',
+   pass: process.env.DB_PASS || '[YOUR DB PASSWORD HERE]',
+   host: process.env.DB_HOST || 'localhost',
+   port: process.env.DB_PORT || '5432',
+   ssl: {
+    ca: process.env.DB_SSL_CA || null,
+    key: process.env.DB_SSL_KEY || null,
+    cert: process.env.DB_SSL_CERT || null
+   }
+ },
+ s3: {
+   bucket: '[YOUR BUCKET HERE]'
+ }
+};
+```
+If you are running Backstrap Server locally, or on a single server instance (eg. one ec2 instance), you can leave s3.bucket alone.  Fill in the required information the database you plan to use.  Don't worry about setting up any tables, as Backstrap will spool up everything it needs automatically to get going (assuming your postgres user permissions permit this).  If you are running Backstrap Server on a horizontally scaled network of servers, s3.bucket must point to the s3 bucket where you plan to store the Configuration files to which all instances will need access (more on this later).
+
 If Backstrap detects no users in the database, it assumes this is the initial launch and will automatically create a single user account with username `bsroot`.  This user has the role of `super-user` and can be used to bootstrap other admin/super-user accounts for you and your support team.  If you use a browser to navigate to `http://[YOUR URL]:[YOUR PORT]` you will be presented with a form for assigning the `bsroot` user a password.  For example, if you are running Backstrap Server locally on the default port, the address you will hit is `http://localhost:3000`.  This is the only user that gets created in this way, all other users must either be entered inside the web console or by using the sign up endpoint.
 
 ## Create a New Endpoint/Controller
