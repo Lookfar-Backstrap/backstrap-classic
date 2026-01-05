@@ -515,6 +515,9 @@ function requestPipeline(req, res, verb) {
         res.status(200).download(results.download_path);
       }
     }
+    else if(results && results.redirect_to) {
+      res.redirect(results.redirect_to);
+    }
     else {
       res.status(200).send(results);
     }
